@@ -1,0 +1,95 @@
+/* ---------- in-game (de_dust2_cv) ---------- */
+.in-game body { overflow: hidden; }
+.game { position: fixed; inset: 0; z-index: 90; background: #000; user-select: none; }
+.game[hidden] { display: none; }
+.game > canvas { display: block; width: 100%; height: 100%; }
+
+.hud {
+  --hud: rgba(255, 168, 0, .82);
+  position: absolute; inset: 0; pointer-events: none;
+  color: var(--hud); font-family: ArialPixel, monospace;
+  /* everything in the HUD scales with the screen, like the page text */
+  font-size: clamp(14px, 0.45vw + 9px, 20px);
+}
+.hud[hidden] { display: none; }
+
+/* crosshair (classic green, opens up while moving / shooting) */
+.crosshair { position: absolute; left: 50%; top: 50%; --gap: 5px; }
+.crosshair i { position: absolute; background: rgb(50, 250, 50); }
+.crosshair .t, .crosshair .b { left: -1px; width: 2px; height: 9px; }
+.crosshair .l, .crosshair .r { top: -1px; height: 2px; width: 9px; }
+.crosshair .t { top: calc(-1 * (var(--gap) + 9px)); }
+.crosshair .b { top: var(--gap); }
+.crosshair .l { left: calc(-1 * (var(--gap) + 9px)); }
+.crosshair .r { left: var(--gap); }
+
+/* bottom row: health, armor | timer | ammo */
+.hud-row {
+  position: absolute; left: 0; right: 0; bottom: 12px; padding: 0 24px;
+  display: flex; justify-content: space-between; align-items: flex-end;
+}
+.hud-group { display: flex; gap: 1.2em; align-items: flex-end; font-size: clamp(30px, 2.5vw, 48px); }
+.hud-num { display: flex; align-items: center; gap: .3em; font-size: clamp(30px, 2.5vw, 48px); line-height: 1; }
+.hud-num svg { width: .78em; height: .78em; fill: currentColor; }
+.hud-num .sep { opacity: .7; margin: 0 4px; }
+.hud-num.low { color: rgba(255, 40, 40, .9); }
+.money { position: absolute; right: 24px; bottom: calc(clamp(30px, 2.5vw, 48px) + 30px); font-size: clamp(26px, 2.1vw, 42px); line-height: 1; display: flex; gap: .4em; }
+.money .delta { color: rgba(60, 220, 60, .9); opacity: 0; transition: opacity .3s; }
+.money .delta.show { opacity: 1; }
+
+/* radar */
+.radar { position: absolute; left: 14px; top: 14px; width: clamp(130px, 11vw, 210px); height: clamp(130px, 11vw, 210px); }
+
+/* chat / notices (bottom-left) */
+.chat { position: absolute; left: 20px; bottom: calc(clamp(30px, 2.5vw, 48px) + 40px); font-size: 1em; line-height: 1.5; color: #fff; text-shadow: 1px 1px 0 #000; }
+.chat p { transition: opacity .6s; }
+.chat p.old { opacity: 0; }
+.chat .ct { color: #9fc4ff; }
+.chat .g { color: #7fe07f; }
+
+/* "press E" prompt and centre messages */
+.use-hint {
+  position: absolute; left: 50%; top: 60%; transform: translateX(-50%);
+  color: #fff; background: rgba(0, 0, 0, .5); border: 1px solid rgba(255, 168, 0, .6);
+  padding: .3em .75em; white-space: nowrap; font-size: 1.1em;
+}
+.use-hint b { color: var(--hud); font-weight: 400; }
+.center-msg {
+  position: absolute; left: 0; right: 0; top: 26%; text-align: center;
+  font-size: clamp(24px, 2.2vw, 40px); color: #fff; text-shadow: 2px 2px 0 #000;
+}
+.top-right { position: absolute; right: 18px; top: 14px; text-align: right; font-size: 1.05em; color: #fff; text-shadow: 1px 1px 0 #000; }
+.top-right span { color: var(--hud); }
+
+/* scoreboard (hold Tab) */
+.scoreboard {
+  position: absolute; left: 50%; top: 12%; transform: translateX(-50%);
+  width: min(46em, calc(100vw - 32px)); background: rgba(0, 0, 0, .6); border: 1px solid #000;
+  padding: .8em 1em; color: #fff; font-size: 1em;
+}
+.scoreboard header { display: flex; justify-content: space-between; margin-bottom: 8px; }
+.scoreboard table { width: 100%; border-collapse: collapse; }
+.scoreboard th { text-align: left; font-weight: 400; color: var(--text-3); border-bottom: 1px solid #555; padding: 2px 6px; }
+.scoreboard td { padding: 3px 6px; color: #9fc4ff; }
+.scoreboard tr.done td { color: #7fe07f; }
+.scoreboard tr.todo td { color: #8a8f86; }
+
+/* pause menu (Esc) */
+.game-pause {
+  position: absolute; inset: 0; background: rgba(0, 0, 0, .55);
+  display: flex; flex-direction: column; justify-content: flex-end; padding: 0 8vw 12vh;
+}
+.game-pause[hidden] { display: none; }
+.game-pause .title { color: #fff; font-size: clamp(1.6rem, 4vw, 2.6rem); text-shadow: 3px 3px 0 #000; margin-bottom: 30px; }
+
+/* in-game window (the CV section windows open here) */
+.game-modal {
+  position: absolute; inset: 0; background: rgba(0, 0, 0, .35);
+  display: flex; align-items: center; justify-content: center; padding: 16px;
+}
+.game-modal[hidden] { display: none; }
+.game-modal-inner { width: 100%; max-width: 1040px; max-height: 100%; overflow: auto; display: flex; justify-content: center; }
+.game-modal .cs-dialog.window { max-width: 1020px; }
+.game-modal .cs-dialog .content { padding: 14px 16px; }
+.motd .keys { display: grid; grid-template-columns: 8em 1fr; gap: 4px 12px; margin-top: 12px; }
+.motd .keys dt { color: var(--accent); }
