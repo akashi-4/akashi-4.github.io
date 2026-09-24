@@ -104,7 +104,7 @@
     /* loosely arranged, like windows someone dragged around */
     #career   { width: 100%; }
     #projects { width: 99%; margin-left: 1%; }
-    #contact  { width: 80%; margin-left: 11%; }
+    #contact  { width: 72%; margin-left: 14%; }
     #skills   { margin-top: 64px; }
     #personal { width: 95%; }
     /* the window you jumped to blinks once, like a focused VGUI window */
@@ -169,8 +169,14 @@
     /* projects */
     .cs-tabs .panel { padding: 20px; }
     /* cs16.css gives tab labels a fixed 27px height, which clips the larger text */
-    .cs-tabs .label { height: auto; min-width: 0; padding: .4em .8em .35em; line-height: 1.2; font-size: 1rem; }
-    .cs-tabs .radiotab:checked + .label { height: auto; padding: .45em .8em .45em; }
+    /* equal-width tab labels: 6 across, or 3 + 3 when the window is narrow (see @container below) */
+    .cs-tabs .label {
+      height: auto; flex: 0 0 calc((100% - 6px) / 6); min-width: 0;
+      text-align: center; white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+      padding: .4em .3em .35em; line-height: 1.2; font-size: 1rem;
+    }
+    .cs-tabs .radiotab:checked + .label { height: auto; padding: .45em .3em .45em; }
+    @container (max-width: 600px) { .cs-tabs .label { flex-basis: calc((100% - 3px) / 3); } }
     /* personal projects: description first, then the stack / type / year box underneath */
     .project { display: flex; flex-direction: column; gap: 14px; }
     .info { display: grid; grid-template-columns: 4.5em 1fr; gap: 6px 10px; }
@@ -231,7 +237,6 @@
     @media (max-width: 700px) {
       .career, .skills { grid-template-columns: 1fr; }
       .cs-tabs .panel { padding: 14px 12px; }
-      .cs-tabs .label { min-width: 0; }
       .skill { grid-template-columns: 1fr; gap: 2px; }
       .taskbar .clock { display: none; }
       .taskbar .cs-btn { padding-inline: 4px; font-size: .9rem; }
@@ -403,28 +408,6 @@
           </div>
           <p class="muted win-note">Company projects, so the source code is private. Happy to walk through them in an interview.</p>
         </div>
-
-        <div class="cs-dialog window" id="contact">
-          <div class="heading">
-            <div class="wrapper"><div class="icon"></div><div class="text">Quit game?</div></div>
-            <a class="cs-btn close" href="#top" aria-label="Back to menu"></a>
-          </div>
-          <div class="content">
-            <p>Before you go — let's talk.</p>
-            <dl class="contact-list">
-              <dt>Email</dt><dd><a href="mailto:tirlonifurukawa@gmail.com">tirlonifurukawa@gmail.com</a></dd>
-              <dt>GitHub</dt><dd><a href="https://github.com/akashi-4">github.com/akashi-4</a></dd>
-              <dt>LinkedIn</dt><dd><a href="https://www.linkedin.com/in/joao-furukawa">linkedin.com/in/joao-furukawa</a></dd>
-              <dt>Location</dt><dd>Coimbra, Portugal</dd>
-              <dt>Nationality</dt><dd>Brazilian · Italian</dd>
-            </dl>
-          </div>
-          <div class="footer-btns">
-            <a class="cs-btn" href="mailto:tirlonifurukawa@gmail.com">Email me</a>
-            <a class="cs-btn" href="Joao-Furukawa-CV.pdf" download>CV (PDF)</a>
-            <a class="cs-btn" href="#top">Cancel</a>
-          </div>
-        </div>
       </div>
       <div class="desk-col">
         <div class="cs-dialog window" id="skills">
@@ -572,6 +555,27 @@
           </div>
           <div class="footer-btns">
             <a class="cs-btn" id="personal-repo" href="https://github.com/akashi-4">GitHub</a>
+          </div>
+        </div>
+
+        <div class="cs-dialog window" id="contact">
+          <div class="heading">
+            <div class="wrapper"><div class="icon"></div><div class="text">Contact</div></div>
+            <a class="cs-btn close" href="#top" aria-label="Back to menu"></a>
+          </div>
+          <div class="content">
+            <p>Let's talk.</p>
+            <dl class="contact-list">
+              <dt>Email</dt><dd><a href="mailto:tirlonifurukawa@gmail.com">tirlonifurukawa@gmail.com</a></dd>
+              <dt>GitHub</dt><dd><a href="https://github.com/akashi-4">github.com/akashi-4</a></dd>
+              <dt>LinkedIn</dt><dd><a href="https://www.linkedin.com/in/joao-furukawa">linkedin.com/in/joao-furukawa</a></dd>
+              <dt>Location</dt><dd>Coimbra, Portugal</dd>
+              <dt>Nationality</dt><dd>Brazilian · Italian</dd>
+            </dl>
+          </div>
+          <div class="footer-btns">
+            <a class="cs-btn" href="mailto:tirlonifurukawa@gmail.com">Email me</a>
+            <a class="cs-btn" href="Joao-Furukawa-CV.pdf" download>CV (PDF)</a>
           </div>
         </div>
       </div>

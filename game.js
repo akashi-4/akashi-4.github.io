@@ -573,7 +573,7 @@
       { id: 'skills', title: 'Options — Skills', heading: 'Skills', lines: ['JS / TS · React · Node.js', 'Python · SQL · Java · C', 'RAG · PyTorch · Docker · Azure'], at: [-2.96, 1.9, -3], face: '+x' },
       { id: 'work', title: 'Projects — Work @ TUU', heading: 'Work @ TUU', lines: ['AI assistant in Microsoft Teams', 'Internal platforms & automation', 'Company website & design system'], at: [3, 1.9, -25.96], face: '+z' },
       { id: 'personal', title: 'Projects — Personal & Uni', heading: 'Personal & University', lines: ['FutSabado · Googol · DEIChain', 'Mario AI · ArtBench · Potrivia'], at: [17.96, 1.9, -13.5], face: '-x' },
-      { id: 'contact', title: 'Quit game?', heading: 'Contact', lines: ['Email · GitHub · LinkedIn', 'Download CV (PDF)'], at: [12.5, 2.8, -25.96], face: '+z' },
+      { id: 'contact', title: 'Contact', heading: 'Get in touch', lines: ['Email · GitHub · LinkedIn', 'Download CV (PDF)'], at: [12.5, 2.8, -25.96], face: '+z' },
     ];
     const faceRot = { '+x': Math.PI / 2, '-x': -Math.PI / 2, '+z': 0, '-z': Math.PI };
 
