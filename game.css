@@ -91,3 +91,39 @@
 .game-modal .cs-dialog .content { padding: 14px 16px; }
 .motd .keys { display: grid; grid-template-columns: 8em 1fr; gap: 4px 12px; margin-top: 12px; }
 .motd .keys dt { color: var(--accent); }
+
+/* MacBook: "entering" the computer — scanline screen glow, then the window turns on like a CRT */
+.enter-fx {
+  position: absolute; inset: 0; pointer-events: none; opacity: 0;
+  background:
+    repeating-linear-gradient(0deg, rgba(0, 0, 0, .28) 0 2px, transparent 2px 4px),
+    radial-gradient(ellipse at center, #1f2c1b 0%, #0b100a 78%);
+}
+.enter-fx[hidden] { display: none; }
+.game-modal .cs-dialog.crt-in { animation: crt-in .38s ease-out both; }
+.game-modal .cs-dialog.crt-out { animation: crt-out .22s ease-in both; }
+@keyframes crt-in {
+  0% { transform: scale(.55, .004); filter: brightness(4); opacity: .3; }
+  45% { transform: scale(1, .012); filter: brightness(3); opacity: 1; }
+  100% { transform: none; filter: none; }
+}
+@keyframes crt-out {
+  0% { transform: none; filter: none; }
+  55% { transform: scale(1, .012); filter: brightness(3); }
+  100% { transform: scale(0, .004); filter: brightness(5); opacity: 0; }
+}
+@media (prefers-reduced-motion: reduce) {
+  .game-modal .cs-dialog.crt-in, .game-modal .cs-dialog.crt-out { animation-duration: .01s; }
+}
+
+/* gear select */
+.gear-list { display: grid; gap: 8px; margin: 12px 0; }
+.gear-opt {
+  display: grid; grid-template-columns: 2em 1fr; gap: 2px 10px; align-items: center;
+  padding: 10px 12px; text-decoration: none; color: var(--text); background: var(--secondary-bg);
+  border: 1px solid; border-color: var(--border-dark) var(--border-light) var(--border-light) var(--border-dark);
+}
+.gear-opt:hover, .gear-opt:focus-visible { background: var(--secondary-accent); outline: 0; }
+.gear-opt:hover .muted, .gear-opt:focus-visible .muted { color: #fff; }
+.gear-opt .key { grid-row: span 2; color: var(--accent); font-size: 1.7em; line-height: 1; text-align: center; }
+.gear-opt b { font-weight: 400; color: #fff; }

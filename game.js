@@ -178,12 +178,14 @@
         <h2 class="title">de_dust2_cv</h2>
         <nav class="main-menu" aria-label="Game menu">
           <a href="#" data-act="resume">Resume Game</a>
+          <a href="#" data-act="gear">Change Gear</a>
           <a href="#" data-act="motd">Controls</a>
           <a href="#desktop" data-act="classic">Classic View</a>
           <div class="gap"></div>
           <a href="#top" data-act="quit">Quit</a>
         </nav>
       </div>
+      <div class="enter-fx" id="g-fx" hidden></div>
       <div class="game-modal" id="g-modal" hidden><div class="game-modal-inner" id="g-modal-inner"></div></div>`;
     document.body.appendChild(el);
 
@@ -196,6 +198,7 @@
     const pauseEl = $('#g-pause', el);
     const modalEl = $('#g-modal', el);
     const modalInner = $('#g-modal-inner', el);
+    const fxEl = $('#g-fx', el);
 
     /* ------------------------------------------------------- renderer */
     const renderer = new THREE.WebGLRenderer({ antialias: false, powerPreference: 'high-performance' });
@@ -649,6 +652,133 @@
     vm.rotation.order = 'YXZ';
     const VM_BASE = new V3(0.12, -0.12, -0.27);
 
+    /* --------------------------------------------------------- laptop */
+    // An open silver laptop held in one hand. The screen stays black until you're near a
+    // panel; pressing E "enters" it. No logo on the lid.
+    const LAP_W = 0.15, LAP_D = 0.105, BASE_T = 0.007, LID_H = 0.1, LID_T = 0.005;
+    const lapRoot = new THREE.Group();   // posed every frame; its origin is the centre of the base
+    const lapSpin = new THREE.Group();   // spins on a fingertip during inspect
+    const lapBody = new THREE.Group();   // hinge at local z = 0
+    const lidPivot = new THREE.Group();
+    lapRoot.rotation.order = 'YXZ';
+    lapRoot.add(lapSpin); lapSpin.add(lapBody); lapBody.add(lidPivot);
+    lapBody.position.z = -LAP_D / 2;
+    lidPivot.position.y = BASE_T;
+    vmRoot.add(lapRoot);
+    const lapHand = new THREE.Group();   // holding it from below
+    const lapFinger = new THREE.Group(); // balancing it during inspect
+    lapRoot.add(lapHand, lapFinger);
+    const screenCanvas = document.createElement('canvas');
+    screenCanvas.width = 512; screenCanvas.height = 340;
+    const screenCtx = screenCanvas.getContext('2d');
+    const screenTex = new THREE.CanvasTexture(screenCanvas);
+    screenTex.colorSpace = THREE.SRGBColorSpace;
+    {
+      const alu = new THREE.MeshLambertMaterial({ color: 0xc4c8cf });
+      const bezel = new THREE.MeshBasicMaterial({ color: 0x0b0b0c });
+      const glove = new THREE.MeshLambertMaterial({ color: 0x1b1c1f });
+      const skin = new THREE.MeshLambertMaterial({ color: 0xd49a78 });
+      const sleeve = new THREE.MeshLambertMaterial({ color: 0x27304a });
+      // keyboard deck
+      const [kc, kg] = makeCanvas(256, 180);
+      kg.fillStyle = '#c9cdd4'; kg.fillRect(0, 0, 256, 180);
+      kg.fillStyle = '#26272a'; kg.fillRect(14, 10, 228, 92);
+      for (let r = 0; r < 6; r++) for (let c = 0; c < 14; c++) {
+        kg.fillStyle = r === 5 && c > 3 && c < 10 ? '#3b3c40' : '#3f4044';
+        if (r === 5 && c > 4 && c < 10) continue;
+        kg.fillRect(17 + c * 16, 13 + r * 15, 14, 13);
+      }
+      kg.fillStyle = '#3b3c40'; kg.fillRect(17 + 5 * 16, 13 + 5 * 15, 5 * 16 - 2, 13);   // space bar
+      kg.fillStyle = '#b7bbc3'; kg.fillRect(78, 112, 100, 60);                       // trackpad
+      kg.strokeStyle = '#a3a7ae'; kg.strokeRect(78.5, 112.5, 99, 59);
+      const deck = new THREE.Mesh(new THREE.PlaneGeometry(LAP_W * 0.96, LAP_D * 0.94),
+        new THREE.MeshLambertMaterial({ map: toTexture(kc, false) }));
+      deck.rotation.x = -Math.PI / 2; deck.position.set(0, BASE_T + 0.0004, LAP_D / 2);
+      const base = new THREE.Mesh(new THREE.BoxGeometry(LAP_W, BASE_T, LAP_D), alu);
+      base.position.set(0, BASE_T / 2, LAP_D / 2);
+      lapBody.add(base, deck);
+      // lid: aluminium back, black bezel, screen
+      const lid = new THREE.Mesh(new THREE.BoxGeometry(LAP_W, LID_H, LID_T), alu);
+      lid.position.set(0, LID_H / 2, -LID_T / 2);
+      const bez = new THREE.Mesh(new THREE.PlaneGeometry(LAP_W * 0.985, LID_H * 0.98), bezel);
+      bez.position.set(0, LID_H / 2, 0.0003);
+      const scr = new THREE.Mesh(new THREE.PlaneGeometry(LAP_W * 0.9, LID_H * 0.86),
+        new THREE.MeshBasicMaterial({ map: screenTex, toneMapped: false }));
+      scr.position.set(0, LID_H / 2 + 0.002, 0.0006);
+      lidPivot.add(lid, bez, scr);
+      // hand under the right side, thumb over the palm rest, sleeve back to the camera
+      const hb = (grp, w, h, d, m, x, y, z, rx = 0) => {
+        const mesh = new THREE.Mesh(new THREE.BoxGeometry(w, h, d), m);
+        mesh.position.set(x, y, z); mesh.rotation.x = rx; grp.add(mesh); return mesh;
+      };
+      hb(lapHand, 0.05, 0.02, 0.075, glove, LAP_W / 2 - 0.022, -0.012, 0.004);
+      hb(lapHand, 0.012, 0.01, 0.032, glove, LAP_W / 2 - 0.012, BASE_T + 0.005, 0.03);
+      hb(lapHand, 0.011, 0.008, 0.016, skin, LAP_W / 2 - 0.012, BASE_T + 0.005, 0.006);
+      for (const z of [-0.028, -0.012, 0.004]) hb(lapHand, 0.01, 0.018, 0.012, glove, LAP_W / 2 + 0.004, -0.001, z);
+      const arm = new THREE.Mesh(new THREE.CylinderGeometry(0.036, 0.044, 0.34, 10), sleeve);
+      arm.rotation.x = Math.PI / 2 - 0.45; arm.position.set(LAP_W / 2 - 0.01, -0.07, 0.17); lapHand.add(arm);
+      // inspect: one finger up under the centre of the base
+      hb(lapFinger, 0.013, 0.05, 0.013, skin, 0, -0.026, 0);
+      hb(lapFinger, 0.034, 0.032, 0.038, glove, 0.004, -0.066, 0.006);
+      const arm2 = new THREE.Mesh(new THREE.CylinderGeometry(0.034, 0.042, 0.3, 10), sleeve);
+      arm2.rotation.x = Math.PI / 2 - 0.8; arm2.position.set(0.02, -0.14, 0.1); lapFinger.add(arm2);
+      lapFinger.visible = false;
+    }
+
+    // What the laptop screen shows: black when idle, the panel name when you're close,
+    // a terminal typing the connection while you "enter" it.
+    let screenKey = '';
+    function drawScreen(mode, def, progress = 1) {
+      if (mode === 'connect' && !def) return;   // keep showing the finished connection
+      const key = mode + (def ? def.id : '') + (mode === 'connect' ? Math.floor(progress * 12) : '');
+      if (key === screenKey) return;
+      screenKey = key;
+      const g = screenCtx, W = 512, H = 340;
+      if (mode === 'off') {
+        g.fillStyle = '#050506'; g.fillRect(0, 0, W, H);
+        const grd = g.createLinearGradient(0, 0, W, H);
+        grd.addColorStop(0, 'rgba(255,255,255,.07)'); grd.addColorStop(.45, 'rgba(255,255,255,0)');
+        g.fillStyle = grd; g.fillRect(0, 0, W, H);
+      } else {
+        g.fillStyle = '#0d120c'; g.fillRect(0, 0, W, H);
+        g.fillStyle = '#4a5942'; g.fillRect(0, 0, W, 34);
+        g.font = '20px ArialPixel, monospace'; g.textBaseline = 'middle';
+        g.fillStyle = '#fff'; g.fillText('recruiter@de_dust2_cv', 14, 18);
+        if (mode === 'wake') {
+          g.fillStyle = '#c4b550'; g.font = '34px ArialPixel, monospace';
+          g.fillText(def.heading, 24, 120);
+          g.fillStyle = '#a0aa95'; g.font = '22px ArialPixel, monospace';
+          g.fillText(def.title, 24, 166);
+          g.fillStyle = '#dedfd6'; g.fillText('[E]  connect', 24, 260);
+        } else {
+          const lines = [`$ ssh ${def.id}.panel`, 'Connecting to', `  ${def.heading}...`, 'Handshake OK', 'Connected.'];
+          const shown = Math.max(1, Math.ceil(progress * lines.length));
+          g.font = '24px ArialPixel, monospace';
+          lines.slice(0, shown).forEach((t, i) => {
+            g.fillStyle = i === lines.length - 1 ? '#7fe07f' : (i === 0 ? '#c4b550' : '#dedfd6');
+            g.fillText(t, 20, 74 + i * 44);
+          });
+          if (progress < 1) { g.fillStyle = '#dedfd6'; g.fillRect(20, 74 + shown * 44 - 12, 12, 24); }
+        }
+        for (let y = 0; y < H; y += 3) { g.fillStyle = 'rgba(0,0,0,.18)'; g.fillRect(0, y, W, 1); }
+      }
+      screenTex.needsUpdate = true;
+    }
+    drawScreen('off');
+
+    // Poses (position/rotation of lapRoot, lid angle, spin), blended by the animations
+    const HOLD = { x: 0.11, y: -0.19, z: -0.36, rx: 0.42, ry: -0.42, rz: 0.1, lid: -0.28, spin: 0 };
+    const ENTER = d => ({ x: 0, y: -(BASE_T + LID_H / 2), z: -d + LAP_D / 2, rx: 0, ry: 0, rz: 0, lid: 0, spin: 0 });
+    const BALANCE = { x: 0.04, y: -0.075, z: -0.36, rx: 0.75, ry: 0, rz: 0, lid: Math.PI / 2 - 0.03, spin: 0 };
+    const lerpPose = (a, b, k) => {
+      const o = {};
+      for (const key in a) o[key] = a[key] + (b[key] - a[key]) * k;
+      return o;
+    };
+    const ease = k => k * k * (3 - 2 * k);
+    const easeIn = k => k * k;
+    const easeOut = k => 1 - (1 - k) * (1 - k);
+
     /* --------------------------------------------------------- player */
     const R = 0.4, STAND = 1.83, DUCK = 1.15, EYE_STAND = 1.63, EYE_DUCK = 0.98;
     const STEP = 0.46, GRAVITY = 20.3, JUMP = 6.8;
@@ -764,11 +894,45 @@
     const center = new THREE.Vector2(0, 0);
     let press = 0;
     function click() {
+      if (anim && anim.type === 'inspect') anim = null;
       press = 1;
       Sound.click();
       hud.cursor.classList.add('down');
       setTimeout(() => hud.cursor.classList.remove('down'), 90);
-      if (lookTarget) openPanel(lookTarget);
+      if (lookTarget) usePanel(lookTarget);
+    }
+
+    /* ------------------------------------------------ gear + animations */
+    const reducedMotion = matchMedia('(prefers-reduced-motion: reduce)').matches;
+    let gear = 'mouse';          // 'mouse' | 'laptop'
+    let gearChosen = false;
+    let anim = null;             // { type: 'enter' | 'exit' | 'inspect' | 'draw', t, dur, def }
+    function startAnim(type, def) {
+      const durs = { enter: 1.15, exit: 0.6, inspect: gear === 'laptop' ? 2.6 : 1.4, draw: 0.35 };
+      anim = { type, t: 0, dur: reducedMotion && type !== 'draw' ? Math.min(durs[type], 0.35) : durs[type], def };
+    }
+    function setGear(g, announce = true) {
+      gearChosen = true;
+      if (g === gear) return;
+      gear = g;
+      startAnim('draw');
+      if (announce) { Sound.click(); chat(`* Equipped <span class="g">${g === 'laptop' ? 'MacBook' : 'Mouse'}</span>`); }
+    }
+    function usePanel(def) {
+      if (gear === 'laptop') {
+        if (anim && anim.type === 'enter') return;
+        state = 'anim';
+        hud.use.hidden = true;
+        fxEl.hidden = false; fxEl.style.opacity = 0;
+        Sound.use();
+        startAnim('enter', def);
+      } else {
+        openPanel(def);
+      }
+    }
+    function inspect() {
+      if (anim) return;
+      startAnim('inspect');
     }
 
     /* ------------------------------------------------------------ HUD */
@@ -859,19 +1023,40 @@
           <a class="cs-btn close" href="#top" aria-label="Close"></a></div>
         <div class="content">
           <h2>Welcome to de_dust2_cv</h2>
-          <p style="margin-top:8px">Find the six panels on the walls, walk up to one and <span class="accent">click</span> it (or press <span class="accent">E</span>) to open it.</p>
+          <p style="margin-top:8px">Find the six panels on the walls and walk up to one. With the <span class="accent">mouse</span>, click it (or press E). With the <span class="accent">MacBook</span>, press E to jack into it.</p>
           <dl class="keys">
             <dt>W A S D</dt><dd>Move</dd>
             <dt>Mouse</dt><dd>Look · click a panel to open it</dd>
             <dt>Space</dt><dd>Jump</dd>
             <dt>C</dt><dd>Crouch (crouch-jump onto crates)</dd>
             <dt>Shift</dt><dd>Walk quietly</dd>
-            <dt>E</dt><dd>Open panel (same as click)</dd>
+            <dt>E / click</dt><dd>Open or connect to a panel</dd>
+            <dt>F</dt><dd>Inspect</dd>
+            <dt>1 / 2</dt><dd>Mouse / MacBook</dd>
             <dt>Tab</dt><dd>Scoreboard</dd>
             <dt>Esc</dt><dd>Menu</dd>
           </dl>
         </div>
         <div class="footer-btns"><a class="cs-btn" href="#top">OK</a></div>`;
+      return w;
+    }
+    function buildGear() {
+      const w = document.createElement('div');
+      w.className = 'cs-dialog window gear';
+      w.style.maxWidth = '560px';
+      w.innerHTML = `
+        <div class="heading"><div class="wrapper"><div class="icon"></div><div class="text">Choose your gear</div></div>
+          <a class="cs-btn close" href="#top" aria-label="Close"></a></div>
+        <div class="content">
+          <p>How do you want to read this CV?</p>
+          <div class="gear-list">
+            <a href="#" class="gear-opt" data-gear="mouse"><span class="key">1</span><b>Mouse</b>
+              <span class="muted">Point and click. Panels open instantly.</span></a>
+            <a href="#" class="gear-opt" data-gear="laptop"><span class="key">2</span><b>MacBook</b>
+              <span class="muted">Walk up to a panel and press E to jack into it. F to show off.</span></a>
+          </div>
+          <p class="muted">Switch any time with 1 / 2.</p>
+        </div>`;
       return w;
     }
     const windowFor = {
@@ -887,8 +1072,12 @@
     let modal = null;         // { el, parent, next }
     let motdShown = false;
 
-    function openWindow(win) {
-      modal = { el: win, parent: win.parentNode, next: win.nextSibling };
+    function openWindow(win, viaLaptop = false) {
+      modal = { el: win, parent: win.parentNode, next: win.nextSibling, viaLaptop };
+      if (viaLaptop) {
+        win.classList.add('crt-in');
+        win.addEventListener('animationend', () => win.classList.remove('crt-in'), { once: true });
+      }
       modalInner.appendChild(win);
       modalEl.hidden = false;
       pauseEl.hidden = true;
@@ -898,9 +1087,9 @@
       const first = win.querySelector('input, a, button');
       if (first) first.focus({ preventScroll: true });
     }
-    function openPanel(def) {
-      Sound.use();
-      openWindow(windowFor[def.id]());
+    function openPanel(def, viaLaptop = false) {
+      if (!viaLaptop) Sound.use();
+      openWindow(windowFor[def.id](), viaLaptop);
       if (!read.has(def.id)) {
         read.add(def.id);
         hud.read.textContent = `${read.size}/${panelDefs.length}`;
@@ -910,21 +1099,49 @@
         if (read.size === panelDefs.length) setTimeout(() => centerMsg('Counter-Terrorists Win', 4), 400);
       }
     }
-    function closeModal(relock) {
-      if (!modal) return;
+    function restoreModal() {
       if (modal.parent) modal.parent.insertBefore(modal.el, modal.next);
       else modal.el.remove();
       modal = null;
       modalEl.hidden = true;
       hud.root.hidden = false;
-      if (relock) lock(); else showPause();
+    }
+    function closeModal(relock) {
+      if (!modal || modal.closing) return;
+      if (relock) lock();   // request it now, while we still have the click's user gesture
+      if (!modal.viaLaptop) {
+        restoreModal();
+        if (!relock) showPause();
+        return;
+      }
+      // leaving the computer: the window collapses like a CRT, then the laptop drops back down
+      modal.closing = true;
+      const win = modal.el;
+      win.classList.add('crt-out');
+      setTimeout(() => {
+        win.classList.remove('crt-out');
+        restoreModal();
+        if (!relock) showPause();
+        startAnim('exit');
+      }, reducedMotion ? 10 : 220);
+    }
+    function chooseGear(g) {
+      setGear(g, gearChosen);
+      closeModal(true);
     }
     modalEl.addEventListener('click', e => {
       if (e.target === modalEl) { closeModal(true); return; }
+      const opt = e.target.closest('[data-gear]');
+      if (opt) { e.preventDefault(); chooseGear(opt.dataset.gear); return; }
       const a = e.target.closest('a');
       if (!a) return;
       const href = a.getAttribute('href') || '';
-      if (href.startsWith('#')) { e.preventDefault(); closeModal(true); }
+      if (href.startsWith('#')) {
+        e.preventDefault();
+        // first time: after the welcome message comes the gear choice
+        if (modal && modal.el.classList.contains('motd') && !gearChosen) { restoreModal(); openWindow(buildGear()); return; }
+        closeModal(true);
+      }
       else if (/^https?:/.test(href)) { e.preventDefault(); open(href, '_blank', 'noopener'); }
     });
 
@@ -941,6 +1158,7 @@
       const act = a.dataset.act;
       if (act === 'resume') lock();
       else if (act === 'motd') openWindow(buildMotd());
+      else if (act === 'gear') openWindow(buildGear());
       else if (act === 'classic') exit('#desktop');
       else if (act === 'quit') exit('#top');
     });
@@ -961,6 +1179,10 @@
         pauseEl.hidden = true;
         for (const k in keys) keys[k] = false;
       } else if (state === 'playing') {
+        showPause();
+      } else if (state === 'anim') {
+        // Esc during the "enter" animation: cancel it
+        anim = null; fxEl.hidden = true; screenKey = '';
         showPause();
       }
     });
@@ -984,12 +1206,18 @@
       if (state === 'off') return;
       if (state === 'modal') {
         if (e.key === 'Escape') { e.preventDefault(); closeModal(false); }
+        else if (modal && modal.el.classList.contains('gear') && (e.code === 'Digit1' || e.code === 'Digit2')) {
+          chooseGear(e.code === 'Digit1' ? 'mouse' : 'laptop');
+        }
         return;
       }
       if (state !== 'playing') return;
       if (e.code === 'Tab') { e.preventDefault(); renderScoreboard(); hud.score.hidden = false; return; }
       if (e.code === 'Space') { e.preventDefault(); if (!e.repeat) jumpQueued = true; }
-      if (e.code === 'KeyE' && !e.repeat && lookTarget) openPanel(lookTarget);
+      if (e.code === 'KeyE' && !e.repeat && lookTarget) usePanel(lookTarget);
+      if (e.code === 'KeyF' && !e.repeat) inspect();
+      if (e.code === 'Digit1') setGear('mouse');
+      if (e.code === 'Digit2') setGear('laptop');
       keys[e.code] = true;
     });
     addEventListener('keyup', e => {
@@ -1041,11 +1269,60 @@
       pressParts.forEach(p => { p.position.y = p.userData.y - press * 0.0035; });
       vmRoot.position.copy(camera.position);
       vmRoot.quaternion.copy(camera.quaternion);
-      vm.position.set(
-        VM_BASE.x + Math.sin(bob * 1.4) * 0.008 * moveK,
-        VM_BASE.y - Math.abs(Math.cos(bob * 1.4)) * 0.01 * moveK + (P.onGround ? 0 : 0.01),
-        VM_BASE.z - press * 0.006);
-      vm.rotation.set(0.55 - press * 0.03, -0.25, 0.05);
+
+      // animations
+      let k = 0;
+      if (anim) {
+        anim.t += dt;
+        k = Math.min(1, anim.t / anim.dur);
+        if (anim.type === 'enter') fxEl.style.opacity = Math.max(0, (k - 0.62) / 0.38);
+        if (k >= 1) {
+          const done = anim;
+          anim = null;
+          if (done.type === 'enter') {
+            fxEl.style.opacity = 1;
+            openPanel(done.def, true);
+          } else if (done.type === 'exit') {
+            fxEl.hidden = true;
+          }
+        }
+      }
+      if (anim && anim.type === 'exit') fxEl.style.opacity = 1 - k * 1.6;
+      const bobX = Math.sin(bob * 1.4) * 0.008 * moveK;
+      const bobY = -Math.abs(Math.cos(bob * 1.4)) * 0.01 * moveK + (P.onGround ? 0 : 0.01);
+      const drawOff = anim && anim.type === 'draw' ? (1 - easeOut(k)) * 0.25 : 0;
+
+      vm.visible = gear === 'mouse';
+      lapRoot.visible = gear === 'laptop';
+      if (gear === 'mouse') {
+        const tw = anim && anim.type === 'inspect' ? ease(k) : 0;
+        vm.position.set(VM_BASE.x + bobX - tw * 0.05, VM_BASE.y + bobY - drawOff + Math.sin(tw * Math.PI) * 0.05, VM_BASE.z - press * 0.006);
+        vm.rotation.set(0.55 - press * 0.03 + Math.sin(tw * Math.PI) * 0.4, -0.25 + tw * Math.PI * 4, 0.05);
+      } else {
+        let pose = HOLD, hk = 1, spinning = false, holding = true;
+        if (anim && anim.type === 'enter') {
+          pose = k < 0.45 ? lerpPose(HOLD, ENTER(0.2), ease(k / 0.45)) : lerpPose(ENTER(0.2), ENTER(0.05), easeIn((k - 0.45) / 0.55));
+          hk = 0; holding = k < 0.3;
+        } else if (anim && anim.type === 'exit') {
+          pose = lerpPose(ENTER(0.05), HOLD, ease(k)); hk = k; holding = k > 0.6;
+        } else if (anim && anim.type === 'inspect') {
+          if (k < 0.18) pose = lerpPose(HOLD, BALANCE, ease(k / 0.18));
+          else if (k < 0.82) {
+            const u = (k - 0.18) / 0.64;
+            pose = { ...BALANCE, spin: easeOut(u) * Math.PI * 10, rz: Math.sin(anim.t * 14) * 0.06 * u, rx: BALANCE.rx + Math.sin(anim.t * 11) * 0.04 * u };
+          } else pose = lerpPose(BALANCE, HOLD, ease((k - 0.82) / 0.18));
+          spinning = k > 0.12 && k < 0.88;
+          hk = 0.3;
+        } else if (modal && modal.viaLaptop) {
+          pose = ENTER(0.05); hk = 0; holding = false;
+        }
+        lapRoot.position.set(pose.x + bobX * hk, pose.y + bobY * hk - drawOff, pose.z);
+        lapRoot.rotation.set(pose.rx, pose.ry, pose.rz);
+        lidPivot.rotation.x = pose.lid;
+        lapSpin.rotation.y = pose.spin;
+        lapHand.visible = holding && !spinning;
+        lapFinger.visible = spinning;
+      }
 
       // what are we looking at?
       lookTarget = null;
@@ -1056,7 +1333,15 @@
         if (hit && hit.object.userData.panel) lookTarget = hit.object.userData.panel;
       }
       hud.use.hidden = !lookTarget;
-      if (lookTarget) hud.use.innerHTML = `Click or press <b>E</b> to open <b>${lookTarget.heading}</b>`;
+      if (lookTarget) hud.use.innerHTML = gear === 'laptop'
+        ? `Press <b>E</b> to connect to <b>${lookTarget.heading}</b>`
+        : `Click or press <b>E</b> to open <b>${lookTarget.heading}</b>`;
+      if (gear === 'laptop') {
+        if (anim && anim.type === 'enter') drawScreen('connect', anim.def, Math.min(1, anim.t / (anim.dur * 0.7)));
+        else if (modal && modal.viaLaptop) drawScreen('connect', null, 1);
+        else if (lookTarget && !(anim && anim.type === 'inspect')) drawScreen('wake', lookTarget);
+        else drawScreen('off');
+      }
 
       // HUD
       hud.cursor.classList.toggle('over', !!lookTarget);
@@ -1082,7 +1367,7 @@
         openWindow(buildMotd());
         setTimeout(() => {
           chat('<span class="ct">Recruiter</span> is joining the Counter-Terrorist force');
-          chat('* Find the panels and press E to read them');
+          chat('* Find the panels and open them (1 / 2 to switch gear)');
         }, 300);
       } else {
         showPause();
@@ -1090,6 +1375,7 @@
     }
     function exit(target) {
       if (modal) closeModalSilently();
+      anim = null; fxEl.hidden = true; screenKey = ''; drawScreen('off');
       state = 'off';
       if (document.pointerLockElement) document.exitPointerLock();
       renderer.setAnimationLoop(null);
