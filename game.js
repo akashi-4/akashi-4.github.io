@@ -68,7 +68,7 @@
       await wait(350); if (aborted) return; say(1);
       const [THREE] = await Promise.all([import(THREE_URL), wait(400)]);
       if (aborted) return; say(2);
-      await Promise.all([document.fonts.load('20px ArialPixel').catch(() => {}), wait(300)]);
+      await Promise.all([document.fonts.load('20px ArialPixel', 'AãÃé·—→').catch(() => {}), wait(300)]);
       if (aborted) return; say(3);
       await wait(300);
       if (aborted) return; say(4);
