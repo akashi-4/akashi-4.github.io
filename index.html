@@ -128,6 +128,11 @@
     .combo-list li[aria-selected="true"] { color: var(--accent); }
     .combo-list li.active { background: var(--secondary-accent); color: #fff; }
     .areas { display: flex; flex-direction: column; gap: 8px; }
+    /* with JS: all areas share one cell, so the box is always as tall as the longest one
+       and switching areas never shifts the page */
+    .areas.stacked { display: grid; }
+    .areas.stacked > .area { grid-area: 1 / 1; }
+    .areas.stacked > .area[hidden] { display: block; visibility: hidden; }
     .area .tag { font-size: .9rem; margin-top: 2px; }
     /* technologies as ticked (read-only) checkboxes */
     .tech-list { display: grid; grid-template-columns: repeat(auto-fill, minmax(140px, 1fr)); gap: 6px 12px; }
@@ -162,7 +167,7 @@
     .entry .org { color: var(--accent); }
 
     /* projects */
-    .cs-tabs .panel { padding: 20px; min-height: 280px; }
+    .cs-tabs .panel { padding: 20px; }
     /* cs16.css gives tab labels a fixed 27px height, which clips the larger text */
     .cs-tabs .label { height: auto; min-width: 0; padding: .4em .8em .35em; line-height: 1.2; font-size: 1rem; }
     .cs-tabs .radiotab:checked + .label { height: auto; padding: .45em .8em .45em; }
@@ -738,6 +743,28 @@
       render();
     }
     enhanceSelect(areaSelect);
+    areas[0].parentElement.classList.add('stacked');
+
+    // Tabs: give every panel the height of the tallest one, so switching tabs never
+    // shifts the page. Re-measured whenever the tab block changes width.
+    function equalizeTabs(tabs) {
+      const panels = [...tabs.querySelectorAll(':scope > .panel')];
+      let raf = 0;
+      function measure() {
+        panels.forEach(p => { p.style.minHeight = ''; });
+        let max = 0;
+        for (const p of panels) {
+          const shown = getComputedStyle(p).display !== 'none';
+          if (!shown) { p.style.display = 'block'; p.style.visibility = 'hidden'; }
+          max = Math.max(max, p.offsetHeight);
+          if (!shown) { p.style.display = ''; p.style.visibility = ''; }
+        }
+        panels.forEach(p => { p.style.minHeight = max + 'px'; });
+      }
+      new ResizeObserver(() => { cancelAnimationFrame(raf); raf = requestAnimationFrame(measure); }).observe(tabs);
+      document.fonts.ready.then(measure);
+    }
+    document.querySelectorAll('.cs-tabs').forEach(equalizeTabs);
 
     // Personal projects: the footer button opens the repo of the open tab
     // (private university repos fall back to the GitHub profile)
