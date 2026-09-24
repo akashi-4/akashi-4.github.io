@@ -13,15 +13,14 @@
 }
 .hud[hidden] { display: none; }
 
-/* crosshair (classic green, opens up while moving / shooting) */
-.crosshair { position: absolute; left: 50%; top: 50%; --gap: 5px; }
-.crosshair i { position: absolute; background: rgb(50, 250, 50); }
-.crosshair .t, .crosshair .b { left: -1px; width: 2px; height: 9px; }
-.crosshair .l, .crosshair .r { top: -1px; height: 2px; width: 9px; }
-.crosshair .t { top: calc(-1 * (var(--gap) + 9px)); }
-.crosshair .b { top: var(--gap); }
-.crosshair .l { left: calc(-1 * (var(--gap) + 9px)); }
-.crosshair .r { left: var(--gap); }
+/* pixel mouse pointer instead of a crosshair; its tip is the centre of the screen */
+.cursor {
+  position: absolute; left: 50%; top: 50%; width: 15px; height: 24px;
+  fill: #fff; stroke: #000; stroke-width: 1; shape-rendering: crispEdges;
+  filter: drop-shadow(1px 1px 0 rgba(0,0,0,.5));
+}
+.cursor.over { fill: var(--hud); }
+.cursor.down { transform: translate(1px, 1px); }
 
 /* bottom row: health, armor | timer | ammo */
 .hud-row {
@@ -32,7 +31,6 @@
 .hud-num { display: flex; align-items: center; gap: .3em; font-size: clamp(30px, 2.5vw, 48px); line-height: 1; }
 .hud-num svg { width: .78em; height: .78em; fill: currentColor; }
 .hud-num .sep { opacity: .7; margin: 0 4px; }
-.hud-num.low { color: rgba(255, 40, 40, .9); }
 .money { position: absolute; right: 24px; bottom: calc(clamp(30px, 2.5vw, 48px) + 30px); font-size: clamp(26px, 2.1vw, 42px); line-height: 1; display: flex; gap: .4em; }
 .money .delta { color: rgba(60, 220, 60, .9); opacity: 0; transition: opacity .3s; }
 .money .delta.show { opacity: 1; }

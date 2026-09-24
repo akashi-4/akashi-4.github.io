@@ -138,15 +138,9 @@
       o.connect(g); g.connect(this.master);
       o.start(t); o.stop(t + dur);
     },
-    shot() {
-      this.burst({ dur: 0.22, freq: 4000, freqEnd: 300, gain: 0.9 });
-      this.tone({ dur: 0.12, freq: 160, freqEnd: 45, gain: 0.7 });
-    },
-    dry() { this.tone({ dur: 0.03, freq: 1800, type: 'square', gain: 0.08 }); },
-    reload() {
-      this.tone({ dur: 0.04, freq: 900, type: 'square', gain: 0.07, delay: 0.35 });
-      this.tone({ dur: 0.05, freq: 600, type: 'square', gain: 0.08, delay: 1.3 });
-      this.tone({ dur: 0.04, freq: 1200, type: 'square', gain: 0.07, delay: 1.9 });
+    click() {
+      this.burst({ dur: 0.025, type: 'highpass', freq: 2500, gain: 0.35 });
+      this.tone({ dur: 0.015, freq: 1900, type: 'square', gain: 0.05 });
     },
     step() { this.burst({ dur: 0.07, type: 'bandpass', freq: 700 + Math.random() * 400, q: 0.8, gain: 0.25, rate: 0.8 + Math.random() * 0.4 }); },
     land() { this.burst({ dur: 0.1, type: 'lowpass', freq: 500, gain: 0.35 }); },
@@ -165,7 +159,7 @@
       <div class="hud" id="hud">
         <canvas class="radar" width="300" height="300"></canvas>
         <div class="top-right">de_dust2_cv · panels read <span id="h-read">0/6</span><br>hold TAB for scores</div>
-        <div class="crosshair"><i class="t"></i><i class="b"></i><i class="l"></i><i class="r"></i></div>
+        <svg class="cursor" viewBox="0 0 12 19" aria-hidden="true"><path d="M.5.5v15l3.5-3.5 3 6 2-1-3-6h5z"/></svg>
         <div class="chat" id="h-chat"></div>
         <div class="use-hint" id="h-use" hidden></div>
         <div class="center-msg" id="h-center" hidden></div>
@@ -176,7 +170,7 @@
             <div class="hud-num"><svg viewBox="0 0 10 10"><path d="M5 0l4.5 1.6v3.2C9.5 7.4 7.6 9.2 5 10 2.4 9.2.5 7.4.5 4.8V1.6z"/></svg>100</div>
           </div>
           <div class="hud-num" id="h-time-wrap"><svg viewBox="0 0 10 10"><path d="M5 0a5 5 0 110 10A5 5 0 015 0zm0 1.4a3.6 3.6 0 100 7.2 3.6 3.6 0 000-7.2zM4.4 2.4h1.2v2.4l1.8 1.1-.6 1-2.4-1.4z"/></svg><span id="h-time">1:55</span></div>
-          <div class="hud-num"><span id="h-ammo">12</span><span class="sep">|</span><span id="h-reserve">100</span><svg viewBox="0 0 10 10"><path d="M4 0h2l1 2.2V10H3V2.2z"/></svg></div>
+          <div class="hud-num" title="Panels read"><span id="h-count">0</span><span class="sep">|</span><span>6</span><svg viewBox="0 0 12 19"><path d="M0 0v16l4-4 3 6 2.5-1.2-3-6H12z"/></svg></div>
         </div>
         <div class="scoreboard" id="h-score" hidden></div>
       </div>
@@ -196,8 +190,8 @@
     const hud = {
       read: $('#h-read', el), chat: $('#h-chat', el), use: $('#h-use', el), center: $('#h-center', el),
       money: $('#h-money', el), delta: $('#h-delta', el), time: $('#h-time', el),
-      ammo: $('#h-ammo', el), reserve: $('#h-reserve', el), score: $('#h-score', el),
-      cross: $('.crosshair', el), radar: $('.radar', el), root: $('#hud', el),
+      count: $('#h-count', el), score: $('#h-score', el),
+      cursor: $('.cursor', el), radar: $('.radar', el), root: $('#hud', el),
     };
     const pauseEl = $('#g-pause', el);
     const modalEl = $('#g-modal', el);
@@ -381,28 +375,6 @@
       for (const y of [20, 64, 108]) { g.fillStyle = 'rgba(20,30,35,.6)'; g.fillRect(0, y - 3, 128, 6); g.fillStyle = 'rgba(200,210,220,.2)'; g.fillRect(0, y - 3, 128, 1); }
       speckle(g, 128, 128, 700, 0.25, 0.08);
       tex.barrel = toTexture(c);
-    }
-    { // bullet hole decal
-      const [c, g] = makeCanvas(32);
-      const grd = g.createRadialGradient(16, 16, 0, 16, 16, 16);
-      grd.addColorStop(0, 'rgba(10,8,5,1)'); grd.addColorStop(0.3, 'rgba(25,18,10,.95)');
-      grd.addColorStop(0.55, 'rgba(60,45,30,.5)'); grd.addColorStop(1, 'rgba(60,45,30,0)');
-      g.fillStyle = grd; g.fillRect(0, 0, 32, 32);
-      tex.hole = toTexture(c, false);
-    }
-    { // muzzle flash
-      const [c, g] = makeCanvas(64);
-      const grd = g.createRadialGradient(32, 32, 0, 32, 32, 32);
-      grd.addColorStop(0, 'rgba(255,255,220,1)'); grd.addColorStop(0.25, 'rgba(255,210,90,.9)');
-      grd.addColorStop(0.6, 'rgba(255,120,20,.35)'); grd.addColorStop(1, 'rgba(255,90,0,0)');
-      g.fillStyle = grd;
-      g.beginPath();
-      for (let i = 0; i < 16; i++) {
-        const a = i / 16 * Math.PI * 2, r = i % 2 ? 12 : 32;
-        g.lineTo(32 + Math.cos(a) * r, 32 + Math.sin(a) * r);
-      }
-      g.fill();
-      tex.flash = toTexture(c, false);
     }
     function paintTexture(w, h, draw) {
       const [c, g] = makeCanvas(w, h);
@@ -624,7 +596,8 @@
     }
 
     /* ----------------------------------------------------- view model */
-    // A low-poly USP in a gloved hand, drawn in its own pass so it never clips into walls.
+    // A computer mouse in a fingerless glove (like the hero illustration), drawn in its
+    // own pass so it never clips into walls.
     const vmScene = new THREE.Scene();
     vmScene.add(new THREE.HemisphereLight(0xd6e4f5, 0xa5824f, 1.3));
     const vmSun = new THREE.DirectionalLight(0xfff0d0, 1.8);
@@ -633,33 +606,48 @@
     const vmRoot = new THREE.Group();
     const vm = new THREE.Group();
     vmRoot.add(vm); vmScene.add(vmRoot);
+    const pressParts = [];   // left button + index finger, pushed down on click
     {
-      const dark = new THREE.MeshLambertMaterial({ color: 0x45474b });
-      const darker = new THREE.MeshLambertMaterial({ color: 0x2c2d30 });
-      const glove = new THREE.MeshLambertMaterial({ color: 0x3b3d33 });
-      const sleeve = new THREE.MeshLambertMaterial({ color: 0x4a5a44 });
-      const part = (w, h, d, m, x, y, z, rx = 0) => {
+      const shell = new THREE.MeshLambertMaterial({ color: 0x6b6e75 });
+      const buttonMat = new THREE.MeshLambertMaterial({ color: 0x55585e });
+      const wheelMat = new THREE.MeshLambertMaterial({ color: 0x1e1f22 });
+      const cableMat = new THREE.MeshLambertMaterial({ color: 0x151517 });
+      const glove = new THREE.MeshLambertMaterial({ color: 0x1b1c1f });
+      const skin = new THREE.MeshLambertMaterial({ color: 0xd49a78 });
+      const sleeve = new THREE.MeshLambertMaterial({ color: 0x27304a });
+      const box = (w, h, d, m, x, y, z, rx = 0) => {
         const mesh = new THREE.Mesh(new THREE.BoxGeometry(w, h, d), m);
         mesh.position.set(x, y, z); mesh.rotation.x = rx; vm.add(mesh); return mesh;
       };
-      part(0.032, 0.036, 0.2, dark, 0, 0.022, -0.06);             // slide
-      part(0.03, 0.02, 0.17, darker, 0, -0.004, -0.045);          // frame
-      part(0.028, 0.1, 0.045, darker, 0, -0.06, 0.02, -0.28);     // grip
-      part(0.006, 0.02, 0.04, darker, 0, -0.026, -0.02);          // trigger guard
-      part(0.006, 0.008, 0.01, darker, 0, 0.045, -0.15);          // front sight
-      part(0.02, 0.008, 0.01, darker, 0, 0.045, 0.03);            // rear sight
-      const muzzle = new THREE.Mesh(new THREE.CylinderGeometry(0.008, 0.008, 0.02, 8), darker);
-      muzzle.rotation.x = Math.PI / 2; muzzle.position.set(0, 0.022, -0.165); vm.add(muzzle);
-      part(0.05, 0.075, 0.09, glove, 0.004, -0.065, 0.03, -0.28); // hand
-      const arm = new THREE.Mesh(new THREE.CylinderGeometry(0.038, 0.045, 0.34, 10), sleeve);
-      arm.rotation.x = Math.PI / 2 - 0.35; arm.position.set(0.01, -0.13, 0.2); vm.add(arm);
+      // rounded body
+      const body = new THREE.Mesh(new THREE.SphereGeometry(1, 20, 14), shell);
+      body.scale.set(0.032, 0.02, 0.054); vm.add(body);
+      // two buttons with a split between them, and the scroll wheel
+      const left = box(0.0295, 0.005, 0.046, buttonMat, -0.0155, 0.0165, -0.028, -0.32);
+      box(0.0295, 0.005, 0.046, buttonMat, 0.0155, 0.0165, -0.028, -0.32);
+      const wheel = new THREE.Mesh(new THREE.CylinderGeometry(0.0065, 0.0065, 0.005, 12), wheelMat);
+      wheel.rotation.z = Math.PI / 2; wheel.position.set(0, 0.0215, -0.03); vm.add(wheel);
+      // cable curling away from the front
+      const cable = new THREE.CatmullRomCurve3([
+        new V3(0, 0.004, -0.054), new V3(0.004, 0.0, -0.09), new V3(0.02, -0.03, -0.13),
+        new V3(0.05, -0.09, -0.12), new V3(0.07, -0.16, -0.06)]);
+      vm.add(new THREE.Mesh(new THREE.TubeGeometry(cable, 24, 0.0022, 6), cableMat));
+      // hand: palm over the back, thumb on the side, fingerless glove on two fingers
+      box(0.046, 0.016, 0.036, glove, 0.002, 0.021, 0.042, 0.2);    // palm on the back hump
+      box(0.011, 0.012, 0.03, glove, -0.035, 0.002, 0.012, 0.1);    // thumb along the side
+      box(0.01, 0.011, 0.016, skin, -0.036, 0.002, -0.01, 0.1);
+      const indexGlove = box(0.009, 0.008, 0.02, glove, -0.019, 0.024, 0.014, -0.15);
+      const indexTip = box(0.008, 0.007, 0.02, skin, -0.019, 0.022, -0.006, -0.3);
+      box(0.009, 0.008, 0.02, glove, 0.019, 0.024, 0.014, -0.15);
+      box(0.008, 0.007, 0.02, skin, 0.019, 0.022, -0.006, -0.3);
+      box(0.01, 0.011, 0.03, glove, 0.035, 0.006, 0.02, 0.05);      // ring + little finger
+      pressParts.push(left, indexGlove, indexTip);
+      pressParts.forEach(p => { p.userData.y = p.position.y; });
+      const arm = new THREE.Mesh(new THREE.CylinderGeometry(0.036, 0.044, 0.34, 10), sleeve);
+      arm.rotation.x = Math.PI / 2 - 0.3; arm.position.set(0.012, -0.03, 0.2); vm.add(arm);
     }
-    const flash = new THREE.Mesh(new THREE.PlaneGeometry(0.14, 0.14),
-      new THREE.MeshBasicMaterial({ map: tex.flash, transparent: true, blending: THREE.AdditiveBlending, depthWrite: false }));
-    flash.position.set(0, 0.022, -0.2);
-    flash.visible = false;
-    vm.add(flash);
-    const VM_BASE = new V3(0.14, -0.15, -0.36);
+    vm.rotation.order = 'YXZ';
+    const VM_BASE = new V3(0.12, -0.12, -0.27);
 
     /* --------------------------------------------------------- player */
     const R = 0.4, STAND = 1.83, DUCK = 1.15, EYE_STAND = 1.63, EYE_DUCK = 0.98;
@@ -771,42 +759,16 @@
       if (P.onGround && !wasOnGround && fallSpeed < -4) Sound.land();
     }
 
-    /* --------------------------------------------------------- weapon */
-    const W = { ammo: 12, reserve: 100, next: 0, reloadUntil: 0, kick: 0, flashUntil: 0 };
-    const holes = [];
+    /* ---------------------------------------------------------- mouse */
     const ray = new THREE.Raycaster();
     const center = new THREE.Vector2(0, 0);
-    const holeGeo = new THREE.PlaneGeometry(0.07, 0.07);
-    const holeMat = new THREE.MeshLambertMaterial({ map: tex.hole, transparent: true, depthWrite: false, polygonOffset: true, polygonOffsetFactor: -4 });
-
-    function reload(now) {
-      if (W.reloadUntil > now || W.ammo === 12 || W.reserve === 0) return;
-      W.reloadUntil = now + 2.2;
-      Sound.reload();
-    }
-    function fire(now) {
-      if (now < W.next || W.reloadUntil > now) return;
-      if (W.ammo === 0) { Sound.dry(); W.next = now + 0.2; reload(now); return; }
-      W.ammo--; W.next = now + 0.15;
-      W.kick = 1; W.flashUntil = now + 0.05;
-      P.punch = Math.min(P.punch + 0.035, 0.12);
-      Sound.shot();
-      const speed = Math.hypot(P.vel.x, P.vel.z);
-      const spread = 0.004 + speed * 0.004 + (P.onGround ? 0 : 0.05);
-      center.set((Math.random() - 0.5) * spread * 2, (Math.random() - 0.5) * spread * 2);
-      ray.setFromCamera(center, camera);
-      ray.far = 200;
-      const hit = ray.intersectObjects([...solids, ...panels], false)[0];
-      if (hit && hit.face) {
-        const n = hit.face.normal.clone().transformDirection(hit.object.matrixWorld);
-        const m = new THREE.Mesh(holeGeo, holeMat);
-        m.position.copy(hit.point).addScaledVector(n, 0.004);
-        m.lookAt(hit.point.clone().add(n));
-        m.rotation.z = Math.random() * 6;
-        scene.add(m); holes.push(m);
-        if (holes.length > 60) scene.remove(holes.shift());
-      }
-      if (W.ammo === 0) setTimeout(() => reload(clock), 250);
+    let press = 0;
+    function click() {
+      press = 1;
+      Sound.click();
+      hud.cursor.classList.add('down');
+      setTimeout(() => hud.cursor.classList.remove('down'), 90);
+      if (lookTarget) openPanel(lookTarget);
     }
 
     /* ------------------------------------------------------------ HUD */
@@ -897,15 +859,14 @@
           <a class="cs-btn close" href="#top" aria-label="Close"></a></div>
         <div class="content">
           <h2>Welcome to de_dust2_cv</h2>
-          <p style="margin-top:8px">Find the six panels on the walls, walk up to one and press <span class="accent">E</span> to open it.</p>
+          <p style="margin-top:8px">Find the six panels on the walls, walk up to one and <span class="accent">click</span> it (or press <span class="accent">E</span>) to open it.</p>
           <dl class="keys">
             <dt>W A S D</dt><dd>Move</dd>
-            <dt>Mouse</dt><dd>Look · click to shoot</dd>
+            <dt>Mouse</dt><dd>Look · click a panel to open it</dd>
             <dt>Space</dt><dd>Jump</dd>
             <dt>C</dt><dd>Crouch (crouch-jump onto crates)</dd>
             <dt>Shift</dt><dd>Walk quietly</dd>
-            <dt>E</dt><dd>Use panel</dd>
-            <dt>R</dt><dd>Reload</dd>
+            <dt>E</dt><dd>Open panel (same as click)</dd>
             <dt>Tab</dt><dd>Scoreboard</dd>
             <dt>Esc</dt><dd>Menu</dd>
           </dl>
@@ -943,6 +904,7 @@
       if (!read.has(def.id)) {
         read.add(def.id);
         hud.read.textContent = `${read.size}/${panelDefs.length}`;
+        hud.count.textContent = read.size;
         chat(`<span class="g">* Objective:</span> read ${def.heading}`);
         addMoney(300);
         if (read.size === panelDefs.length) setTimeout(() => centerMsg('Counter-Terrorists Win', 4), 400);
@@ -1016,7 +978,7 @@
       P.pitch = Math.max(-1.55, Math.min(1.55, P.pitch));
     });
     document.addEventListener('mousedown', e => {
-      if (state === 'playing' && e.button === 0) fire(clock);
+      if (state === 'playing' && e.button === 0) click();
     });
     addEventListener('keydown', e => {
       if (state === 'off') return;
@@ -1028,7 +990,6 @@
       if (e.code === 'Tab') { e.preventDefault(); renderScoreboard(); hud.score.hidden = false; return; }
       if (e.code === 'Space') { e.preventDefault(); if (!e.repeat) jumpQueued = true; }
       if (e.code === 'KeyE' && !e.repeat && lookTarget) openPanel(lookTarget);
-      if (e.code === 'KeyR') reload(clock);
       keys[e.code] = true;
     });
     addEventListener('keyup', e => {
@@ -1057,10 +1018,6 @@
       if (state === 'playing') {
         const n = Math.ceil(dt / 0.008);
         for (let i = 0; i < n; i++) physics(dt / n);
-        if (W.reloadUntil && now >= W.reloadUntil) {
-          const need = 12 - W.ammo, take = Math.min(need, W.reserve);
-          W.ammo += take; W.reserve -= take; W.reloadUntil = 0;
-        }
         roundLeft -= dt;
         if (roundLeft <= 0) { roundLeft = 115; centerMsg('Round Draw'); }
       }
@@ -1073,24 +1030,22 @@
       camera.position.copy(eyePos);
       camera.rotation.set(P.pitch + P.punch, P.yaw, 0);
 
-      // footsteps & weapon bob
+      // footsteps & view-model bob
       const speed = Math.hypot(P.vel.x, P.vel.z);
       if (state === 'playing' && P.onGround && speed > 0.5) {
         bob += dt * speed;
         if (speed > 3.9) { stepDist += speed * dt; if (stepDist > 1.7) { stepDist = 0; Sound.step(); } }
       }
       const moveK = P.onGround ? Math.min(1, speed / MAXSPEED) : 0;
-      W.kick *= Math.max(0, 1 - dt * 12);
-      const reloading = W.reloadUntil > now ? Math.sin(Math.min(1, (W.reloadUntil - now) / 2.2) * Math.PI) : 0;
+      press *= Math.max(0, 1 - dt * 14);
+      pressParts.forEach(p => { p.position.y = p.userData.y - press * 0.0035; });
       vmRoot.position.copy(camera.position);
       vmRoot.quaternion.copy(camera.quaternion);
       vm.position.set(
         VM_BASE.x + Math.sin(bob * 1.4) * 0.008 * moveK,
-        VM_BASE.y - Math.abs(Math.cos(bob * 1.4)) * 0.01 * moveK - reloading * 0.12 + (P.onGround ? 0 : 0.01),
-        VM_BASE.z + W.kick * 0.035);
-      vm.rotation.set(W.kick * 0.25 - reloading * 0.9, 0, reloading * 0.4);
-      flash.visible = now < W.flashUntil;
-      if (flash.visible) flash.rotation.z = Math.random() * 6;
+        VM_BASE.y - Math.abs(Math.cos(bob * 1.4)) * 0.01 * moveK + (P.onGround ? 0 : 0.01),
+        VM_BASE.z - press * 0.006);
+      vm.rotation.set(0.55 - press * 0.03, -0.25, 0.05);
 
       // what are we looking at?
       lookTarget = null;
@@ -1101,16 +1056,12 @@
         if (hit && hit.object.userData.panel) lookTarget = hit.object.userData.panel;
       }
       hud.use.hidden = !lookTarget;
-      if (lookTarget) hud.use.innerHTML = `Press <b>E</b> to open <b>${lookTarget.heading}</b>`;
+      if (lookTarget) hud.use.innerHTML = `Click or press <b>E</b> to open <b>${lookTarget.heading}</b>`;
 
       // HUD
-      const gap = 5 + moveK * 9 + (P.onGround ? 0 : 10) + W.kick * 10 + (P.ducked ? -2 : 0);
-      hud.cross.style.setProperty('--gap', gap.toFixed(1) + 'px');
+      hud.cursor.classList.toggle('over', !!lookTarget);
       const secs = Math.max(0, Math.ceil(roundLeft));
       hud.time.textContent = `${Math.floor(secs / 60)}:${String(secs % 60).padStart(2, '0')}`;
-      hud.ammo.textContent = W.ammo;
-      hud.reserve.textContent = W.reserve;
-      hud.ammo.parentElement.classList.toggle('low', W.ammo <= 3);
       drawRadar();
 
       renderer.clear();
