@@ -154,6 +154,9 @@
 
     /* projects */
     .cs-tabs .panel { padding: 20px; min-height: 280px; }
+    /* cs16.css gives tab labels a fixed 27px height, which clips the larger text */
+    .cs-tabs .label { height: auto; min-width: 0; padding: .4em .8em .35em; line-height: 1.2; font-size: 1rem; }
+    .cs-tabs .radiotab:checked + .label { height: auto; padding: .45em .8em .45em; }
     /* personal projects: description first, then the stack / type / year box underneath */
     .project { display: flex; flex-direction: column; gap: 14px; }
     .info { display: grid; grid-template-columns: 4.5em 1fr; gap: 6px 10px; }
