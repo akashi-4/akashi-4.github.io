@@ -1,8 +1,12 @@
-/* de_dust2_cv — a small walkable Dust2-style map for the CV page.
-   Loaded on demand from the main menu ("New Game"). Walk up to a wall panel
-   and press E to open the matching CV window. */
+/* The CV as a small Counter-Strike game, loaded on demand from the main menu ("New Game").
+   Maps live in maps/*.js: cs_office_cv (default), where every CV section is a locked workstation
+   your MacBook hacks, and de_dust2_cv (bonus), with the sections as panels on the walls. */
 (() => {
   const THREE_URL = 'https://cdn.jsdelivr.net/npm/three@0.170.0/build/three.module.js';
+  const SCRIPT_URL = document.currentScript ? document.currentScript.src : location.href;
+  const MAPS = ['cs_office_cv', 'de_dust2_cv'];
+  const mapFile = { cs_office_cv: 'office', de_dust2_cv: 'dust' };
+  const loadMap = name => import(new URL(`maps/${mapFile[name]}.js`, SCRIPT_URL).href);
   const $ = (s, r = document) => r.querySelector(s);
 
   const link = document.getElementById('new-game');
@@ -61,18 +65,19 @@
       loaderStatus.textContent = steps[i];
       loaderBars.style.width = Math.round((i + 1) / steps.length * 100) + '%';
     };
-    loaderServer.textContent = 'de_dust2_cv · 1/32 players';
+    loaderServer.textContent = `${MAPS[0]} · 1/32 players`;
     say(0);
     showLoader();
     try {
       await wait(350); if (aborted) return; say(1);
-      const [THREE] = await Promise.all([import(THREE_URL), wait(400)]);
+      const [THREE, map] = await Promise.all([import(THREE_URL), loadMap(MAPS[0]), wait(400)]);
       if (aborted) return; say(2);
       await Promise.all([document.fonts.load('20px ArialPixel', 'AãÃé·—→').catch(() => {}), wait(300)]);
       if (aborted) return; say(3);
       await wait(300);
       if (aborted) return; say(4);
-      game = createGame(THREE);
+      const assets = await loadLocalAssets(THREE);
+      game = createGame(THREE, assets, map);
       await wait(300);
       if (aborted) return; say(5);
       await wait(300);
@@ -89,6 +94,61 @@
     }
   }
   link.addEventListener('click', e => { e.preventDefault(); start(); });
+
+  // Optional: textures extracted from your own CS 1.6 install into assets-local/ (git-ignored,
+  // never published). They're only picked up when that folder is served, e.g. by the local dev server.
+  async function loadLocalAssets(THREE) {
+    if (location.protocol === 'file:') return null;
+    try {
+      const res = await fetch('assets-local/manifest.json', { cache: 'no-store' });
+      if (!res.ok) return null;
+      const manifest = await res.json();
+      const loader = new THREE.TextureLoader();
+      const out = {};
+      const loadSet = (set, into) => Promise.all(Object.entries(set).map(async ([key, t]) => {
+        const tex = await loader.loadAsync('assets-local/' + t.file.split('/').map(encodeURIComponent).join('/'));
+        tex.colorSpace = THREE.SRGBColorSpace;
+        tex.wrapS = tex.wrapT = THREE.RepeatWrapping;
+        into[key] = { tex, w: t.w, h: t.h };
+      }));
+      await loadSet(manifest.textures, out);
+      // cs_office textures, by the role they play in maps/office.js
+      if (manifest.office) {
+        out.office = {};
+        await loadSet(manifest.office, out.office).catch(e => { console.warn('office textures not loaded', e); out.office = null; });
+      }
+      // real CS 1.6 view-model hands (exported from your install), with where the held object sits
+      if (manifest.hands) {
+        const loadHand = async file => {
+          const json = await (await fetch('assets-local/' + file, { cache: 'no-store' })).json();
+          const dir = 'assets-local/' + file.slice(0, file.lastIndexOf('/') + 1);
+          json.groups = await Promise.all(json.groups.map(async g => {
+            const tex = await loader.loadAsync(dir + g.texture);
+            tex.colorSpace = THREE.SRGBColorSpace;
+            return { ...g, tex };
+          }));
+          return json;
+        };
+        const h = manifest.hands;
+        out.hands = {
+          laptop: await loadHand(h.laptop), spin: await loadHand(h.spin),
+          laptopGrip: h.laptopGrip, spinTip: h.spinTip,
+        };
+      }
+      // the MacBook view model animated in Blender (hands + laptop, clips laptop_idle / _walk / _enter)
+      if (manifest.laptopModel) {
+        try {
+          const { GLTFLoader } = await import(THREE_URL.replace('build/three.module.js', 'examples/jsm/loaders/GLTFLoader.js'));
+          out.laptopModel = await new GLTFLoader().loadAsync('assets-local/' + manifest.laptopModel);
+        } catch (e) {
+          console.warn('laptop model not loaded', e);
+        }
+      }
+      return out;
+    } catch (e) {
+      return null;
+    }
+  }
   if (new URLSearchParams(location.search).has('play')) {
     addEventListener('load', () => setTimeout(start, root.classList.contains('loading') ? 3200 : 0));
   }
@@ -148,7 +208,7 @@
   };
 
   /* ================================================================= game */
-  function createGame(THREE) {
+  function createGame(THREE, assets = null, firstMap) {
     const V3 = THREE.Vector3;
 
     /* ------------------------------------------------------------ DOM */
@@ -158,8 +218,8 @@
     el.innerHTML = `
       <div class="hud" id="hud">
         <canvas class="radar" width="300" height="300"></canvas>
-        <div class="top-right">de_dust2_cv · panels read <span id="h-read">0/6</span><br>hold TAB for scores</div>
-        <svg class="cursor" viewBox="0 0 12 19" aria-hidden="true"><path d="M.5.5v15l3.5-3.5 3 6 2-1-3-6h5z"/></svg>
+        <div class="top-right"><span class="map-name" id="h-map"></span> · <span id="h-verb">hacked</span> <span id="h-read">0/10</span><br>TAB: files on your MacBook</div>
+        <div class="cursor" aria-hidden="true"></div>
         <div class="chat" id="h-chat"></div>
         <div class="use-hint" id="h-use" hidden></div>
         <div class="center-msg" id="h-center" hidden></div>
@@ -170,15 +230,16 @@
             <div class="hud-num"><svg viewBox="0 0 10 10"><path d="M5 0l4.5 1.6v3.2C9.5 7.4 7.6 9.2 5 10 2.4 9.2.5 7.4.5 4.8V1.6z"/></svg>100</div>
           </div>
           <div class="hud-num" id="h-time-wrap"><svg viewBox="0 0 10 10"><path d="M5 0a5 5 0 110 10A5 5 0 015 0zm0 1.4a3.6 3.6 0 100 7.2 3.6 3.6 0 000-7.2zM4.4 2.4h1.2v2.4l1.8 1.1-.6 1-2.4-1.4z"/></svg><span id="h-time">1:55</span></div>
-          <div class="hud-num" title="Panels read"><span id="h-count">0</span><span class="sep">|</span><span>6</span><svg viewBox="0 0 12 19"><path d="M0 0v16l4-4 3 6 2.5-1.2-3-6H12z"/></svg></div>
+          <div class="hud-num" title="Objectives"><span id="h-count">0</span><span class="sep">|</span><span id="h-total">10</span><svg viewBox="0 0 12 19"><path d="M0 0v16l4-4 3 6 2.5-1.2-3-6H12z"/></svg></div>
         </div>
-        <div class="scoreboard" id="h-score" hidden></div>
       </div>
       <div class="game-pause" id="g-pause" hidden>
-        <h2 class="title">de_dust2_cv</h2>
+        <h2 class="title" id="g-title"></h2>
         <nav class="main-menu" aria-label="Game menu">
           <a href="#" data-act="resume">Resume Game</a>
-          <a href="#" data-act="gear">Change Gear</a>
+          <a href="#" data-act="files">MacBook files</a>
+          <a href="#" data-act="map" id="g-map">Change map</a>
+          <a href="#" data-act="contact">Contact</a>
           <a href="#" data-act="motd">Controls</a>
           <a href="#desktop" data-act="classic">Classic View</a>
           <div class="gap"></div>
@@ -186,18 +247,25 @@
         </nav>
       </div>
       <div class="enter-fx" id="g-fx" hidden></div>
-      <div class="game-modal" id="g-modal" hidden><div class="game-modal-inner" id="g-modal-inner"></div></div>`;
+      <div class="game-modal" id="g-modal" hidden>
+        <div class="mac-frame">
+          <div class="mac-bar" aria-hidden="true"><span id="g-mac-path"></span><span id="g-mac-clock"></span></div>
+          <div class="game-modal-inner" id="g-modal-inner"></div>
+        </div>
+      </div>`;
     document.body.appendChild(el);
 
     const hud = {
       read: $('#h-read', el), chat: $('#h-chat', el), use: $('#h-use', el), center: $('#h-center', el),
       money: $('#h-money', el), delta: $('#h-delta', el), time: $('#h-time', el),
-      count: $('#h-count', el), score: $('#h-score', el),
+      count: $('#h-count', el), total: $('#h-total', el), map: $('#h-map', el), verb: $('#h-verb', el),
       cursor: $('.cursor', el), radar: $('.radar', el), root: $('#hud', el),
     };
     const pauseEl = $('#g-pause', el);
     const modalEl = $('#g-modal', el);
     const modalInner = $('#g-modal-inner', el);
+    const macPath = $('#g-mac-path', el);
+    const macClock = $('#g-mac-clock', el);
     const fxEl = $('#g-fx', el);
 
     /* ------------------------------------------------------- renderer */
@@ -211,7 +279,9 @@
     const maxAniso = Math.min(4, renderer.capabilities.getMaxAnisotropy());
 
     const scene = new THREE.Scene();
-    scene.fog = new THREE.Fog(0xdcc9a0, 45, 150);
+    let mapGroup = new THREE.Group();   // everything the current map built; cleared on a map change
+    scene.add(mapGroup);
+    let mapTextures = [];               // canvas textures the current map made, disposed with it
     const camera = new THREE.PerspectiveCamera(74, 1, 0.05, 400);
     camera.rotation.order = 'YXZ';
 
@@ -236,6 +306,7 @@
       t.colorSpace = THREE.SRGBColorSpace;
       t.anisotropy = maxAniso;
       if (repeat) t.wrapS = t.wrapT = THREE.RepeatWrapping;
+      mapTextures.push(t);
       return t;
     }
     function speckle(g, w, h, n, dark = 0.12, light = 0.08, size = 2) {
@@ -259,398 +330,261 @@
         }
       }
     }
-    function bricks(g, x0, y0, w, h, bw, bh) {
-      g.save();
-      g.beginPath(); g.rect(x0, y0, w, h); g.clip();
-      g.fillStyle = '#8c6a42'; g.fillRect(x0, y0, w, h);
-      for (let row = 0, y = y0; y < y0 + h; row++, y += bh) {
-        for (let x = x0 - (row % 2 ? bw / 2 : 0); x < x0 + w; x += bw) {
-          const s = rr(-12, 12);
-          g.fillStyle = `rgb(${176 + s},${134 + s},${88 + s})`;
-          g.fillRect(x + 1, y + 1, bw - 2, bh - 2);
-        }
-      }
-      g.restore();
-      g.strokeStyle = 'rgba(90,60,30,.55)'; g.lineWidth = 2;
-      g.strokeRect(x0, y0, w, h);
-    }
-
-    const tex = {};
-    { // plaster wall with a few patches of exposed brick (512px covers 5m, so repeats are rare)
-      const [c, g] = makeCanvas(512);
-      g.fillStyle = '#d5bb8d'; g.fillRect(0, 0, 512, 512);
-      blotches(g, 512, 512, 22, '150,110,60', 0.16);
-      blotches(g, 512, 512, 14, '250,235,200', 0.2);
-      // water stains running down
-      for (let i = 0; i < 7; i++) {
-        const x = rr(0, 512), w = rr(10, 40), grd = g.createLinearGradient(0, 0, 0, 512);
-        grd.addColorStop(0, 'rgba(120,85,45,0)'); grd.addColorStop(rr(0.4, 0.9), 'rgba(120,85,45,.12)'); grd.addColorStop(1, 'rgba(120,85,45,0)');
-        g.fillStyle = grd; g.fillRect(x, 0, w, 512);
-      }
-      bricks(g, 40, 330, 92, 46, 24, 11.5);
-      bricks(g, 330, 70, 64, 34, 24, 11.5);
-      bricks(g, 380, 420, 48, 23, 24, 11.5);
-      speckle(g, 512, 512, 9000, 0.12, 0.08, 2.5);
-      g.strokeStyle = 'rgba(80,55,30,.3)'; g.lineWidth = 1;
-      for (let i = 0; i < 9; i++) {
-        let x = rr(0, 512), y = rr(0, 512);
-        g.beginPath(); g.moveTo(x, y);
-        for (let k = 0; k < 7; k++) { x += rr(-16, 16); y += rr(5, 16); g.lineTo(x, y); }
-        g.stroke();
-      }
-      tex.plaster = toTexture(c);
-    }
-    { // wall cap / trim
-      const [c, g] = makeCanvas(128);
-      g.fillStyle = '#b39868'; g.fillRect(0, 0, 128, 128);
-      blotches(g, 128, 128, 6, '110,80,40', 0.2);
-      speckle(g, 128, 128, 900);
-      tex.cap = toTexture(c);
-    }
-    { // sandy ground
-      const [c, g] = makeCanvas(256);
-      g.fillStyle = '#c4a26b'; g.fillRect(0, 0, 256, 256);
-      blotches(g, 256, 256, 18, '140,100,55', 0.2);
-      blotches(g, 256, 256, 12, '240,220,180', 0.18);
-      speckle(g, 256, 256, 5000, 0.18, 0.1, 2.5);
-      for (let i = 0; i < 70; i++) {
-        g.fillStyle = `rgba(${rr(110, 150)},${rr(85, 110)},${rr(55, 70)},.7)`;
-        g.beginPath(); g.ellipse(rr(0, 256), rr(0, 256), rr(1, 3.5), rr(1, 2.5), rr(0, 3), 0, 7); g.fill();
-      }
-      tex.sand = toTexture(c);
-    }
-    { // stone tiles (A site)
-      const [c, g] = makeCanvas(256);
-      g.fillStyle = '#8d7751'; g.fillRect(0, 0, 256, 256);
-      for (let y = 0; y < 2; y++) for (let x = 0; x < 2; x++) {
-        const s = rr(-14, 14);
-        g.fillStyle = `rgb(${188 + s},${165 + s},${124 + s})`;
-        g.fillRect(x * 128 + 3, y * 128 + 3, 122, 122);
-      }
-      blotches(g, 256, 256, 10, '120,90,50', 0.18);
-      speckle(g, 256, 256, 3000);
-      g.strokeStyle = 'rgba(90,65,35,.4)';
-      for (let i = 0; i < 4; i++) { g.beginPath(); let x = rr(0, 256), y = rr(0, 256); g.moveTo(x, y); for (let k = 0; k < 4; k++) { x += rr(-16, 16); y += rr(-16, 16); g.lineTo(x, y); } g.stroke(); }
-      tex.tiles = toTexture(c);
-    }
-    { // wooden crate
-      const [c, g] = makeCanvas(128);
-      g.fillStyle = '#9a6a36'; g.fillRect(0, 0, 128, 128);
-      for (let y = 0; y < 128; y += 16) {
-        const s = rr(-10, 10);
-        g.fillStyle = `rgb(${150 + s},${102 + s},${52 + s})`; g.fillRect(0, y + 1, 128, 14);
-        g.fillStyle = 'rgba(60,35,10,.5)'; g.fillRect(0, y, 128, 1);
-      }
-      speckle(g, 128, 128, 700, 0.2, 0.06);
-      g.strokeStyle = '#6a4219'; g.lineWidth = 12; g.strokeRect(6, 6, 116, 116);
-      g.strokeStyle = 'rgba(200,150,90,.35)'; g.lineWidth = 2; g.strokeRect(1, 1, 126, 126);
-      g.strokeStyle = '#7c4f22'; g.lineWidth = 12;
-      g.beginPath(); g.moveTo(12, 116); g.lineTo(116, 12); g.stroke();
-      g.fillStyle = '#3a2a1a';
-      for (const [x, y] of [[6, 6], [122, 6], [6, 122], [122, 122], [64, 6], [64, 122], [6, 64], [122, 64]]) g.fillRect(x - 1.5, y - 1.5, 3, 3);
-      tex.crate = toTexture(c, false);
-    }
-    { // big wooden doors
-      const [c, g] = makeCanvas(128, 256);
-      for (let x = 0; x < 128; x += 21) {
-        const s = rr(-12, 12);
-        g.fillStyle = `rgb(${118 + s},${80 + s},${46 + s})`; g.fillRect(x, 0, 21, 256);
-        g.fillStyle = 'rgba(40,25,10,.6)'; g.fillRect(x, 0, 2, 256);
-      }
-      speckle(g, 128, 256, 1400, 0.22, 0.05);
-      for (const y of [40, 210]) {
-        g.fillStyle = '#4b3524'; g.fillRect(0, y, 128, 16);
-        g.fillStyle = '#2a2018';
-        for (let x = 8; x < 128; x += 20) g.fillRect(x, y + 6, 4, 4);
-      }
-      tex.door = toTexture(c, false);
-    }
-    { // dark wood beams / panel frames
-      const [c, g] = makeCanvas(64);
-      g.fillStyle = '#5b3f25'; g.fillRect(0, 0, 64, 64);
-      for (let y = 0; y < 64; y += 3) { g.fillStyle = `rgba(30,18,8,${rr(0.05, 0.25)})`; g.fillRect(0, y, 64, 1); }
-      tex.wood = toTexture(c);
-    }
-    { // rusty barrel
-      const [c, g] = makeCanvas(128);
-      g.fillStyle = '#4d6a78'; g.fillRect(0, 0, 128, 128);
-      blotches(g, 128, 128, 8, '140,80,40', 0.5);
-      for (const y of [20, 64, 108]) { g.fillStyle = 'rgba(20,30,35,.6)'; g.fillRect(0, y - 3, 128, 6); g.fillStyle = 'rgba(200,210,220,.2)'; g.fillRect(0, y - 3, 128, 1); }
-      speckle(g, 128, 128, 700, 0.25, 0.08);
-      tex.barrel = toTexture(c);
-    }
-    function paintTexture(w, h, draw) {
-      const [c, g] = makeCanvas(w, h);
-      draw(g);
-      // weather the paint a bit
-      g.globalCompositeOperation = 'destination-out';
-      for (let i = 0; i < 900; i++) { g.fillStyle = `rgba(0,0,0,${rr(0.2, 0.9)})`; g.fillRect(rr(0, w), rr(0, h), rr(1, 4), rr(1, 4)); }
-      return toTexture(c, false);
-    }
-
     /* ------------------------------------------------------ materials */
     const mat = (map, scale, extra = {}) => {
       const m = new THREE.MeshLambertMaterial({ map, ...extra });
       m.userData.scale = scale;
       return m;
     };
-    const M = {
-      plaster: mat(tex.plaster, 5),
-      cap: mat(tex.cap, 1.5),
-      sand: mat(tex.sand, 3.2),
-      tiles: mat(tex.tiles, 2.4),
-      crate: mat(tex.crate, 0),
-      door: mat(tex.door, 0),
-      wood: mat(tex.wood, 1),
-      barrel: mat(tex.barrel, 0),
-    };
+    // Local textures from your CS 1.6 install: GoldSrc maps 1 texel to 1 unit (~1 inch),
+    // so a 128x240 wall texture covers 3.25 x 6.1 m.
+    const UNIT = 0.0254;
+    const real = a => { a.tex.anisotropy = maxAniso; return mat(a.tex, [a.w * UNIT, a.h * UNIT]); };
 
     /* ------------------------------------------------------- geometry */
     const colliders = [];   // AABBs the player collides with
     const solids = [];      // meshes bullets can hit
 
-    // Give box faces UVs from world position so textures tile at a fixed size.
+    // Give box faces UVs from world position so textures tile at a fixed size. With one material
+    // per face (BoxGeometry: 4 vertices per face, +x -x +y -y +z -z), each face uses its own scale,
+    // and faces whose material has no scale keep the whole image.
     function worldUV(geo, scale) {
+      const faceScale = Array.isArray(scale) && typeof scale[0] === 'object' ? scale : null;
       const p = geo.attributes.position, n = geo.attributes.normal, uv = geo.attributes.uv;
       for (let i = 0; i < p.count; i++) {
+        const sc = faceScale ? faceScale[Math.floor(i / 4)].userData.scale : scale;
+        if (!sc) continue;
+        const [su, sv] = Array.isArray(sc) ? sc : [sc, sc];
         const nx = Math.abs(n.getX(i)), ny = Math.abs(n.getY(i));
         const x = p.getX(i), y = p.getY(i), z = p.getZ(i);
         let u, v;
         if (nx > 0.5) { u = z; v = y; } else if (ny > 0.5) { u = x; v = z; } else { u = x; v = y; }
-        uv.setXY(i, u / scale, v / scale);
+        uv.setXY(i, u / su, v / sv);
       }
       uv.needsUpdate = true;
     }
     function box(x1, x2, y1, y2, z1, z2, material, { collide = true, shoot = true, shadow = true } = {}) {
       const geo = new THREE.BoxGeometry(x2 - x1, y2 - y1, z2 - z1);
       geo.translate((x1 + x2) / 2, (y1 + y2) / 2, (z1 + z2) / 2);
-      if (material.userData.scale) worldUV(geo, material.userData.scale);
+      const scale = Array.isArray(material) ? material : material.userData.scale;
+      if (scale) worldUV(geo, scale);
       const mesh = new THREE.Mesh(geo, material);
       mesh.castShadow = shadow; mesh.receiveShadow = true;
-      scene.add(mesh);
-      if (collide) colliders.push({ minX: x1, maxX: x2, minY: y1, maxY: y2, minZ: z1, maxZ: z2 });
+      mapGroup.add(mesh);
+      if (collide) colliders.push(mesh.userData.collider = { minX: x1, maxX: x2, minY: y1, maxY: y2, minZ: z1, maxZ: z2 });
       if (shoot) solids.push(mesh);
       return mesh;
-    }
-    function wall(x1, x2, z1, z2, h) {
-      box(x1, x2, 0, h, z1, z2, M.plaster);
-      box(x1 - 0.08, x2 + 0.08, h, h + 0.22, z1 - 0.08, z2 + 0.08, M.cap, { collide: false });
-      // darker dirt line at the base of the wall
-      box(x1 - 0.03, x2 + 0.03, 0, 0.35, z1 - 0.03, z2 + 0.03, M.cap, { collide: false, shoot: false, shadow: false });
-    }
-    function crate(x, z, size, y = 0) {
-      const h = size / 2;
-      return box(x - h, x + h, y, y + size, z - h, z + h, M.crate);
-    }
-    function barrel(x, z) {
-      const geo = new THREE.CylinderGeometry(0.33, 0.33, 1.0, 14);
-      const mesh = new THREE.Mesh(geo, M.barrel);
-      mesh.position.set(x, 0.5, z);
-      mesh.castShadow = mesh.receiveShadow = true;
-      scene.add(mesh); solids.push(mesh);
-      colliders.push({ minX: x - 0.33, maxX: x + 0.33, minY: 0, maxY: 1, minZ: z - 0.33, maxZ: z + 0.33 });
     }
     function decal(texture, w, h, pos, rotY) {
       const m = new THREE.Mesh(new THREE.PlaneGeometry(w, h),
         new THREE.MeshLambertMaterial({ map: texture, transparent: true, depthWrite: false, polygonOffset: true, polygonOffsetFactor: -2 }));
       m.position.copy(pos); m.rotation.y = rotY; m.receiveShadow = true;
-      scene.add(m);
+      mapGroup.add(m);
       return m;
     }
 
-    /* ------------------------------------------------------------ map */
-    // Floor
-    box(-9, 21, -1, 0, -29, 25, M.sand, { collide: false });
-    box(-4, 18, 0, 0.02, -26, -10, M.tiles, { collide: false, shadow: false });
-
-    // Spawn yard (x -6..6, z 10..22)
-    wall(-7, 7, 22, 23, 6);
-    wall(-7, -6, 9, 22, 6);
-    wall(6, 7, 9, 22, 6);
-    wall(-7, -2, 9, 10, 6.4);
-    wall(2, 7, 9, 10, 6.4);
-    box(-2, 2, 3.4, 6.4, 9, 10, M.plaster);                          // lintel over the doors
-    box(-2.1, 2.1, 3.22, 3.4, 8.9, 10.1, M.wood, { collide: false }); // beam
-    box(-2.4, 2.4, 6.4, 6.62, 8.92, 10.08, M.cap, { collide: false });
-    // The doors, swung open
-    box(-2.02, -1.92, 0, 3.2, 7.05, 9, M.door);
-    box(1.92, 2.02, 0, 3.2, 7.05, 9, M.door);
-    barrel(4.9, 20.9); barrel(4.2, 21.3); barrel(5.2, 20.1);
-    crate(-4.8, 20.8, 1.2); crate(-3.7, 21.2, 0.9);
-
-    // Long corridor (x -3..3, z -10..9)
-    wall(-4, -3, -10, 9, 6);
-    wall(3, 4, -9, 9, 6);
-    crate(2.3, 1.6, 1.2); crate(2.35, 1.65, 1.2, 1.2);
-    crate(2.4, 2.9, 0.9);
-    box(-3, 3, 4.2, 6, -10, -9, M.plaster);                           // arch into the site
-    box(-3.1, 3.1, 4.02, 4.2, -10.1, -8.9, M.wood, { collide: false });
-
-    // A site (x -4..18, z -26..-10)
-    wall(-5, -4, -27, -10, 7);
-    wall(-5, 19, -27, -26, 7);
-    wall(18, 19, -27, -9, 7);
-    wall(4, 19, -10, -9, 7);
-    // raised platform + steps
-    box(9, 18, 0, 0.9, -26, -17, M.tiles);
-    box(11, 16, 0, 0.45, -17, -16, M.tiles);
-    // crates
-    crate(0.6, -19.4, 1.2); crate(1.8, -19.4, 1.2); crate(1.2, -19.4, 1.2, 1.2);
-    crate(16.2, -19.2, 1.5, 0.9);
-    crate(17, -24.9, 1.2, 0.9);
-    crate(8.6, -10.7, 1.2);
-    crate(-3.2, -24.9, 1.2);
-    // wooden beams sticking out of the walls
-    for (const x of [0, 5, 10, 15]) box(x, x + 0.25, 5.2, 5.45, -26, -25.3, M.wood, { collide: false });
-
-    // painted "A" on the platform wall, direction sign in the corridor
-    decal(paintTexture(256, 256, g => {
-      g.fillStyle = 'rgba(35,22,12,.88)';
-      g.font = 'bold 230px Arial, sans-serif'; g.textAlign = 'center'; g.textBaseline = 'middle';
-      g.fillText('A', 128, 140);
-    }), 2.6, 2.6, new V3(17.93, 3.2, -22), -Math.PI / 2);
-    decal(paintTexture(512, 256, g => {
-      g.fillStyle = 'rgba(35,22,12,.88)';
-      g.font = 'bold 170px Arial, sans-serif'; g.textAlign = 'center'; g.textBaseline = 'middle';
-      g.fillText('A →', 256, 140);
-    }), 2.4, 1.2, new V3(0, 5.1, -8.93), 0);
-
-    // Sky
-    {
-      const [c, g] = makeCanvas(4, 256);
-      const grd = g.createLinearGradient(0, 0, 0, 256);
-      grd.addColorStop(0, '#4f84c9'); grd.addColorStop(0.42, '#8fb7e2');
-      grd.addColorStop(0.5, '#e7d9bc'); grd.addColorStop(1, '#cdb58a');
-      g.fillStyle = grd; g.fillRect(0, 0, 4, 256);
-      const sky = new THREE.Mesh(new THREE.SphereGeometry(300, 24, 16),
-        new THREE.MeshBasicMaterial({ map: toTexture(c, false), side: THREE.BackSide, fog: false }));
-      scene.add(sky);
-    }
-
-    // Lighting: warm low sun + sky fill
-    scene.add(new THREE.HemisphereLight(0xd6e4f5, 0xa5824f, 1.35));
-    const sun = new THREE.DirectionalLight(0xfff0d0, 2.4);
-    sun.position.set(-16, 34, 14);
-    sun.target.position.set(6, 0, -3);
-    sun.castShadow = true;
-    sun.shadow.mapSize.set(2048, 2048);
-    Object.assign(sun.shadow.camera, { left: -34, right: 34, top: 34, bottom: -34, near: 1, far: 110 });
-    sun.shadow.bias = -0.0006;
-    sun.shadow.normalBias = 0.03;
-    scene.add(sun, sun.target);
-
-    /* --------------------------------------------------------- panels */
-    const read = new Set();
-    const panels = [];
-    const panelDefs = [
-      { id: 'about', title: 'About', heading: 'João Furukawa', lines: ['Junior Software Developer @ TUU', 'M.Sc. AI · University of Coimbra', 'Full-stack · LLM tools · RAG'], at: [-5.96, 1.9, 16], face: '+x' },
-      { id: 'career', title: 'Career', heading: 'Experience & Education', lines: ['Intern → Junior Dev @ TUU', '08/2025 — present', 'M.Sc. AI · B.Sc. Informatics Eng.'], at: [5.96, 1.9, 16], face: '-x' },
-      { id: 'skills', title: 'Options — Skills', heading: 'Skills', lines: ['JS / TS · React · Node.js', 'Python · SQL · Java · C', 'RAG · PyTorch · Docker · Azure'], at: [-2.96, 1.9, -3], face: '+x' },
-      { id: 'work', title: 'Projects — Work @ TUU', heading: 'Work @ TUU', lines: ['AI assistant in Microsoft Teams', 'Internal platforms & automation', 'Company website & design system'], at: [3, 1.9, -25.96], face: '+z' },
-      { id: 'personal', title: 'Projects — Personal & Uni', heading: 'Personal & University', lines: ['FutSabado · Googol · DEIChain', 'Mario AI · ArtBench · Potrivia'], at: [17.96, 1.9, -13.5], face: '-x' },
-      { id: 'contact', title: 'Contact', heading: 'Get in touch', lines: ['Email · GitHub · LinkedIn', 'Download CV (PDF)'], at: [12.5, 2.8, -25.96], face: '+z' },
+    /* ------------------------------------------------ files & progress */
+    // Every CV section is a file you can pull onto the MacBook. `key` is what progress stores,
+    // so it carries over between maps (dust's single Skills panel grants all six skill files).
+    const SKILLS = [
+      { id: 'frontend', heading: 'Frontend', host: 'frontend-dev-01' },
+      { id: 'backend', heading: 'Backend', host: 'backend-dev-02' },
+      { id: 'ai', heading: 'AI / ML', host: 'ml-lab-03' },
+      { id: 'tools', heading: 'Tools & DevOps', host: 'devops-04' },
+      { id: 'languages', heading: 'Languages', host: 'intl-desk-05' },
+      { id: 'soft', heading: 'Soft skills', host: 'people-ops-06' },
     ];
-    const faceRot = { '+x': Math.PI / 2, '-x': -Math.PI / 2, '+z': 0, '-z': Math.PI };
+    const FILES = [
+      { key: 'about', section: 'about', heading: 'About', file: 'about.txt' },
+      { key: 'career', section: 'career', heading: 'Career', file: 'career.log' },
+      ...SKILLS.map(s => ({ key: 'skills:' + s.id, section: 'skills', category: s.id, heading: s.heading, file: `skills/${s.id}.dat` })),
+      { key: 'work', section: 'work', heading: 'Work @ TUU', file: 'projects/work.md' },
+      { key: 'personal', section: 'personal', heading: 'Personal & University', file: 'projects/personal.md' },
+      { key: 'contact', section: 'contact', heading: 'Contact', file: 'contact.vcf' },
+    ];
+    const fileFor = key => FILES.find(f => f.key === key);
+    const read = new Set();
+    const isDone = d => d.keys.every(k => read.has(k));
 
-    function panelTexture(def) {
-      // drawn at 2x so the text stays sharp when you walk right up to a panel
-      const W = 512, H = 340;
-      const [c, g] = makeCanvas(W * 2, H * 2);
-      g.scale(2, 2);
-      const bevel = (x, y, w, h, light, dark) => {
-        g.fillStyle = light; g.fillRect(x, y, w, 2); g.fillRect(x, y, 2, h);
-        g.fillStyle = dark; g.fillRect(x, y + h - 2, w, 2); g.fillRect(x + w - 2, y, 2, h);
-      };
-      g.fillStyle = '#4a5942'; g.fillRect(0, 0, W, H);
-      bevel(0, 0, W, H, '#8c9284', '#292c21');
-      g.font = '20px ArialPixel, Arial'; g.fillStyle = '#fff'; g.textBaseline = 'middle';
-      g.fillText(def.title, 16, 24);
-      bevel(W - 36, 12, 24, 24, '#8c9284', '#292c21');
-      g.strokeStyle = '#8c9284'; g.lineWidth = 2;
-      g.beginPath(); g.moveTo(W - 30, 18); g.lineTo(W - 18, 30); g.moveTo(W - 18, 18); g.lineTo(W - 30, 30); g.stroke();
-      g.fillStyle = '#3e4637'; g.fillRect(14, 46, W - 28, 232);
-      bevel(14, 46, W - 28, 232, '#292c21', '#8c9284');
-      g.font = '32px ArialPixel, Arial'; g.fillStyle = '#c4b550';
-      g.fillText(def.heading, 30, 84);
-      g.font = '23px ArialPixel, Arial'; g.fillStyle = '#dedfd6';
-      def.lines.forEach((t, i) => g.fillText(t, 30, 136 + i * 38));
-      g.fillStyle = '#4a5942'; g.fillRect(W - 176, 290, 160, 34);
-      bevel(W - 176, 290, 160, 34, '#8c9284', '#292c21');
-      g.font = '20px ArialPixel, Arial'; g.fillStyle = '#fff';
-      g.fillText('[E]  Open', W - 158, 308);
-      const t = toTexture(c, false);
-      t.anisotropy = maxAniso;
-      return t;
+    /* ------------------------------------------------------------ maps */
+    let map = null;          // what the current map's build() returned, plus its name and terminals
+    const panels = [];       // meshes you aim at to use a terminal (userData.panel = its def)
+    const screens = [];      // defs with a live canvas screen, redrawn when their state changes
+    let hackDef = null;      // the terminal being hacked right now
+    const objectives = () => map.terminals.filter(d => !d.finale);
+    const doneCount = () => objectives().filter(isDone).length;
+
+    // Register something you can use. `hit` is the mesh the crosshair has to be on.
+    function terminal(def, hit) {
+      def.keys = def.keys || [def.id];
+      hit.userData.panel = def;
+      def.hit = hit;
+      panels.push(hit);
+      map.terminals.push(def);
+      return def;
     }
-    for (const def of panelDefs) {
-      const grp = new THREE.Group();
-      grp.position.set(...def.at);
-      grp.rotation.y = faceRot[def.face];
-      const frame = new THREE.Mesh(new THREE.BoxGeometry(2.86, 1.96, 0.08), M.wood);
-      frame.position.z = 0.04; frame.castShadow = true; frame.receiveShadow = true;
-      const screen = new THREE.Mesh(new THREE.PlaneGeometry(2.6, 1.727),
-        new THREE.MeshBasicMaterial({ map: panelTexture(def), toneMapped: false }));
-      screen.position.z = 0.085;
-      screen.userData.panel = def;
-      grp.add(frame, screen);
-      scene.add(grp);
-      solids.push(frame);
-      panels.push(screen);
+    // A monitor screen drawn by the game: lock screen, intrusion, access granted, or a door keypad.
+    function terminalScreen(def, w, h) {
+      const W = 512, H = Math.round(512 * h / w);
+      const [c, g] = makeCanvas(W, H);
+      const t = toTexture(c, false);
+      def.scr = { g, t, W, H, key: '' };
+      def.keys = def.keys || [def.id];
+      screens.push(def);
+      return new THREE.Mesh(new THREE.PlaneGeometry(w, h), new THREE.MeshBasicMaterial({ map: t, toneMapped: false }));
+    }
+    const hhmm = () => { const d = new Date(); return `${d.getHours()}:${String(d.getMinutes()).padStart(2, '0')}`; };
+    function drawTerminal(d) {
+      const { g, t, W, H } = d.scr;
+      const state = d.kind === 'keypad' ? (d.locked ? 'deny' : 'ok')
+        : d.locked ? 'deny' : isDone(d) ? 'granted' : hackDef === d ? 'hacking' : 'locked';
+      const tick = state === 'hacking' ? Math.floor(clock * 6) : state === 'locked' ? hhmm() : state === 'deny' ? doneCount() : '';
+      const key = state + tick;
+      if (key === d.scr.key) return;
+      d.scr.key = key;
+      const s = W / 512;
+      g.setTransform(s, 0, 0, s, 0, 0);
+      const w = 512, h = H / s;
+      g.textBaseline = 'middle'; g.textAlign = 'center';
+      if (state === 'locked') {
+        // Windows 2000 "Computer Locked", like every desk in the real cs_office
+        g.fillStyle = '#3a6ea5'; g.fillRect(0, 0, w, h);
+        const bw = 420, bh = Math.min(250, h - 40), bx = (w - bw) / 2, by = (h - bh) / 2;
+        g.fillStyle = '#d4d0c8'; g.fillRect(bx, by, bw, bh);
+        g.fillStyle = '#fff'; g.fillRect(bx, by, bw, 2); g.fillRect(bx, by, 2, bh);
+        g.fillStyle = '#404040'; g.fillRect(bx, by + bh - 2, bw, 2); g.fillRect(bx + bw - 2, by, 2, bh);
+        const grd = g.createLinearGradient(bx, 0, bx + bw, 0);
+        grd.addColorStop(0, '#0a246a'); grd.addColorStop(1, '#a6caf0');
+        g.fillStyle = grd; g.fillRect(bx + 4, by + 4, bw - 8, 34);
+        g.textAlign = 'left'; g.fillStyle = '#fff'; g.font = 'bold 21px Tahoma, Arial, sans-serif';
+        g.fillText('Computer Locked', bx + 14, by + 22);
+        // padlock
+        g.fillStyle = '#c8a200'; g.fillRect(bx + 26, by + 82, 44, 36);
+        g.strokeStyle = '#6b6b6b'; g.lineWidth = 7; g.beginPath(); g.arc(bx + 48, by + 82, 14, Math.PI, 0); g.stroke();
+        g.fillStyle = '#000'; g.font = '19px Tahoma, Arial, sans-serif';
+        g.fillText('This computer is locked.', bx + 90, by + 70);
+        g.font = 'bold 24px Tahoma, Arial, sans-serif'; g.fillText(d.host, bx + 90, by + 104);
+        g.font = '19px Tahoma, Arial, sans-serif'; g.fillText('Password:', bx + 26, by + bh - 50);
+        g.fillStyle = '#fff'; g.fillRect(bx + 130, by + bh - 66, bw - 156, 32);
+        g.fillStyle = '#000'; g.font = '22px Tahoma, Arial, sans-serif'; g.fillText('●●●●●●●', bx + 138, by + bh - 50);
+        g.textAlign = 'right'; g.fillStyle = '#fff'; g.font = '18px Tahoma, Arial, sans-serif';
+        g.fillText(tick, w - 12, h - 16);
+      } else if (state === 'hacking') {
+        g.fillStyle = '#050505'; g.fillRect(0, 0, w, h);
+        g.textAlign = 'left'; g.font = '15px monospace'; g.fillStyle = 'rgba(120,200,120,.55)';
+        for (let y = 14, i = tick * 7; y < h; y += 19, i += 3) {
+          let line = '';
+          for (let k = 0; k < 7; k++) line += ((i * 2654435761 + k * 40503 + y) >>> 0 & 0xffff).toString(16).padStart(4, '0') + ' ';
+          g.fillText(line, 14, y);
+        }
+        if (tick % 2) {
+          g.fillStyle = 'rgba(200,0,0,.85)'; g.fillRect(0, h / 2 - 40, w, 80);
+          g.textAlign = 'center'; g.fillStyle = '#fff'; g.font = 'bold 36px Tahoma, Arial, sans-serif';
+          g.fillText('INTRUSION DETECTED', w / 2, h / 2);
+        }
+      } else if (state === 'granted') {
+        g.fillStyle = '#04120a'; g.fillRect(0, 0, w, h);
+        g.fillStyle = '#5ef07a'; g.font = 'bold 44px Tahoma, Arial, sans-serif';
+        g.fillText('ACCESS GRANTED', w / 2, h * 0.34);
+        g.fillStyle = '#e8f0e8'; g.font = '30px Tahoma, Arial, sans-serif';
+        g.fillText(d.heading, w / 2, h * 0.56);
+        g.fillStyle = '#8fae94'; g.font = '20px monospace';
+        g.fillText(`${d.file} → MacBook`, w / 2, h * 0.75);
+      } else if (state === 'deny') {
+        g.fillStyle = '#1c0404'; g.fillRect(0, 0, w, h);
+        g.fillStyle = '#ff4a3d'; g.font = 'bold 42px Tahoma, Arial, sans-serif';
+        g.fillText('ACCESS DENIED', w / 2, h * 0.3);
+        g.fillStyle = '#f2dada'; g.font = '28px Tahoma, Arial, sans-serif';
+        g.fillText(d.heading, w / 2, h * 0.53);
+        const tot = objectives().length;
+        g.fillStyle = '#d99'; g.font = '22px Tahoma, Arial, sans-serif';
+        g.fillText(`${tick}/${tot} workstations hacked`, w / 2, h * 0.74);
+      } else {
+        g.fillStyle = '#04160a'; g.fillRect(0, 0, w, h);
+        g.fillStyle = '#5ef07a'; g.font = 'bold 42px Tahoma, Arial, sans-serif';
+        g.fillText('ACCESS OK', w / 2, h * 0.4);
+        g.fillStyle = '#e8f0e8'; g.font = '26px Tahoma, Arial, sans-serif';
+        g.fillText('Door unlocked', w / 2, h * 0.62);
+      }
+      g.setTransform(1, 0, 0, 1, 0, 0);
+      for (let y = 0; y < H; y += 3) { g.fillStyle = 'rgba(0,0,0,.14)'; g.fillRect(0, y, W, 1); }
+      t.needsUpdate = true;
+    }
+
+    function disposeMap() {
+      scene.remove(mapGroup);
+      mapGroup.traverse(o => {
+        if (o.geometry) o.geometry.dispose();
+        if (o.material) for (const m of [].concat(o.material)) m.dispose();
+      });
+      for (const t of mapTextures) t.dispose();
+      if (map && map.dispose) map.dispose();
+    }
+    function applyMap(mod) {
+      if (map) disposeMap();
+      mapGroup = new THREE.Group();
+      scene.add(mapGroup);
+      mapTextures = [];
+      colliders.length = solids.length = panels.length = screens.length = 0;
+      seed = 1337;
+      map = { name: mod.name, terminals: [] };
+      const ctx = {
+        THREE, V3, maxAniso, assets, colliders, solids, SKILLS, FILES, fileFor,
+        add: (...o) => mapGroup.add(...o), box, decal, mat, real, makeCanvas, toTexture, rnd, rr, speckle, blotches,
+        terminal, screen: terminalScreen,
+      };
+      Object.assign(map, mod.build(ctx));
+      mapGroup.updateMatrixWorld(true);
+      const p = new V3();
+      for (const d of map.terminals) if (!d.at) { d.hit.getWorldPosition(p); d.at = [p.x, p.y, p.z]; }
+      scene.fog = map.fog || null;
+      const L = map.vmLight;
+      vmHemi.color.set(L.sky); vmHemi.groundColor.set(L.ground); vmHemi.intensity = L.hemi;
+      vmSun.color.set(L.sun); vmSun.intensity = L.sunI;
+      const s = map.spawn;
+      P.pos.set(s.x, s.y, s.z); P.vel.set(0, 0, 0); P.yaw = s.yaw; P.pitch = 0;
+      anim = null; lapInsp = null; hackDef = null; screenKey = '';
+      if (map.unlock && doneCount() === objectives().length) map.unlock(true);
+      hud.map.textContent = map.name;
+      hud.verb.textContent = map.verb === 'hack' ? 'hacked' : 'read';
+      $('#g-title', el).textContent = map.name;
+      $('#g-map', el).textContent = 'Play ' + MAPS.find(n => n !== map.name);
+      updateProgress();
+    }
+    function updateProgress() {
+      const n = doneCount(), tot = objectives().length;
+      hud.read.textContent = `${n}/${tot}`;
+      hud.count.textContent = n;
+      hud.total.textContent = tot;
+    }
+    let switching = false;
+    async function switchMap(name) {
+      if (switching) return;
+      switching = true;
+      centerMsg(`Loading ${name}...`, 30);
+      try {
+        const mod = await loadMap(name);
+        applyMap(mod);
+        centerMsg(name, 2);
+        chat(`* Map changed to <span class="g">${name}</span>`);
+      } catch (e) {
+        console.error(e);
+        centerMsg('Could not load ' + name, 3);
+      } finally {
+        switching = false;
+      }
     }
 
     /* ----------------------------------------------------- view model */
-    // A computer mouse in a fingerless glove (like the hero illustration), drawn in its
-    // own pass so it never clips into walls.
+    // The MacBook in your hands, drawn in its own pass so it never clips into walls.
     const vmScene = new THREE.Scene();
-    vmScene.add(new THREE.HemisphereLight(0xd6e4f5, 0xa5824f, 1.3));
+    const vmHemi = new THREE.HemisphereLight(0xd6e4f5, 0xa5824f, 1.3);   // each map sets its own mood
+    vmScene.add(vmHemi);
     const vmSun = new THREE.DirectionalLight(0xfff0d0, 1.8);
     vmSun.position.set(-1, 2, 1);
     vmScene.add(vmSun);
     const vmRoot = new THREE.Group();
-    const vm = new THREE.Group();
-    vmRoot.add(vm); vmScene.add(vmRoot);
-    const pressParts = [];   // left button + index finger, pushed down on click
-    {
-      const shell = new THREE.MeshLambertMaterial({ color: 0x6b6e75 });
-      const buttonMat = new THREE.MeshLambertMaterial({ color: 0x55585e });
-      const wheelMat = new THREE.MeshLambertMaterial({ color: 0x1e1f22 });
-      const cableMat = new THREE.MeshLambertMaterial({ color: 0x151517 });
-      const glove = new THREE.MeshLambertMaterial({ color: 0x1b1c1f });
-      const skin = new THREE.MeshLambertMaterial({ color: 0xd49a78 });
-      const sleeve = new THREE.MeshLambertMaterial({ color: 0x27304a });
-      const box = (w, h, d, m, x, y, z, rx = 0) => {
-        const mesh = new THREE.Mesh(new THREE.BoxGeometry(w, h, d), m);
-        mesh.position.set(x, y, z); mesh.rotation.x = rx; vm.add(mesh); return mesh;
-      };
-      // rounded body
-      const body = new THREE.Mesh(new THREE.SphereGeometry(1, 20, 14), shell);
-      body.scale.set(0.032, 0.02, 0.054); vm.add(body);
-      // two buttons with a split between them, and the scroll wheel
-      const left = box(0.0295, 0.005, 0.046, buttonMat, -0.0155, 0.0165, -0.028, -0.32);
-      box(0.0295, 0.005, 0.046, buttonMat, 0.0155, 0.0165, -0.028, -0.32);
-      const wheel = new THREE.Mesh(new THREE.CylinderGeometry(0.0065, 0.0065, 0.005, 12), wheelMat);
-      wheel.rotation.z = Math.PI / 2; wheel.position.set(0, 0.0215, -0.03); vm.add(wheel);
-      // cable curling away from the front
-      const cable = new THREE.CatmullRomCurve3([
-        new V3(0, 0.004, -0.054), new V3(0.004, 0.0, -0.09), new V3(0.02, -0.03, -0.13),
-        new V3(0.05, -0.09, -0.12), new V3(0.07, -0.16, -0.06)]);
-      vm.add(new THREE.Mesh(new THREE.TubeGeometry(cable, 24, 0.0022, 6), cableMat));
-      // hand: palm over the back, thumb on the side, fingerless glove on two fingers
-      box(0.046, 0.016, 0.036, glove, 0.002, 0.021, 0.042, 0.2);    // palm on the back hump
-      box(0.011, 0.012, 0.03, glove, -0.035, 0.002, 0.012, 0.1);    // thumb along the side
-      box(0.01, 0.011, 0.016, skin, -0.036, 0.002, -0.01, 0.1);
-      const indexGlove = box(0.009, 0.008, 0.02, glove, -0.019, 0.024, 0.014, -0.15);
-      const indexTip = box(0.008, 0.007, 0.02, skin, -0.019, 0.022, -0.006, -0.3);
-      box(0.009, 0.008, 0.02, glove, 0.019, 0.024, 0.014, -0.15);
-      box(0.008, 0.007, 0.02, skin, 0.019, 0.022, -0.006, -0.3);
-      box(0.01, 0.011, 0.03, glove, 0.035, 0.006, 0.02, 0.05);      // ring + little finger
-      pressParts.push(left, indexGlove, indexTip);
-      pressParts.forEach(p => { p.userData.y = p.position.y; });
-      const arm = new THREE.Mesh(new THREE.CylinderGeometry(0.036, 0.044, 0.34, 10), sleeve);
-      arm.rotation.x = Math.PI / 2 - 0.3; arm.position.set(0.012, -0.03, 0.2); vm.add(arm);
-    }
-    vm.rotation.order = 'YXZ';
-    const VM_BASE = new V3(0.12, -0.12, -0.27);
+    vmScene.add(vmRoot);
 
     /* --------------------------------------------------------- laptop */
     // An open silver laptop held in one hand. The screen stays black until you're near a
@@ -677,7 +611,6 @@
       const alu = new THREE.MeshLambertMaterial({ color: 0xc4c8cf });
       const bezel = new THREE.MeshBasicMaterial({ color: 0x0b0b0c });
       const glove = new THREE.MeshLambertMaterial({ color: 0x1b1c1f });
-      const skin = new THREE.MeshLambertMaterial({ color: 0xd49a78 });
       const sleeve = new THREE.MeshLambertMaterial({ color: 0x27304a });
       // keyboard deck
       const [kc, kg] = makeCanvas(256, 180);
@@ -706,34 +639,39 @@
         new THREE.MeshBasicMaterial({ map: screenTex, toneMapped: false }));
       scr.position.set(0, LID_H / 2 + 0.002, 0.0006);
       lidPivot.add(lid, bez, scr);
-      // hand under the right side, thumb over the palm rest, sleeve back to the camera
-      const hb = (grp, w, h, d, m, x, y, z, rx = 0) => {
-        const mesh = new THREE.Mesh(new THREE.BoxGeometry(w, h, d), m);
-        mesh.position.set(x, y, z); mesh.rotation.x = rx; grp.add(mesh); return mesh;
+      // gloved hand grabbing the right edge like a clamp: palm underneath, glove wrapped
+      // around the edge, thumb resting on the palm rest. Rounded shapes, no fingers.
+      const blob = (grp, sx, sy, sz, x, y, z, ry = 0) => {
+        const mesh = new THREE.Mesh(new THREE.SphereGeometry(1, 18, 12), glove);
+        mesh.scale.set(sx, sy, sz); mesh.position.set(x, y, z); mesh.rotation.y = ry; grp.add(mesh); return mesh;
       };
-      hb(lapHand, 0.05, 0.02, 0.075, glove, LAP_W / 2 - 0.022, -0.012, 0.004);
-      hb(lapHand, 0.012, 0.01, 0.032, glove, LAP_W / 2 - 0.012, BASE_T + 0.005, 0.03);
-      hb(lapHand, 0.011, 0.008, 0.016, skin, LAP_W / 2 - 0.012, BASE_T + 0.005, 0.006);
-      for (const z of [-0.028, -0.012, 0.004]) hb(lapHand, 0.01, 0.018, 0.012, glove, LAP_W / 2 + 0.004, -0.001, z);
+      const EDGE = LAP_W / 2;
+      blob(lapHand, 0.028, 0.013, 0.046, EDGE - 0.014, -0.011, 0.012);                 // palm under the base
+      blob(lapHand, 0.011, 0.016, 0.042, EDGE + 0.004, -0.001, 0.008);                 // wrapped around the edge
+      blob(lapHand, 0.009, 0.0055, 0.03, EDGE - 0.016, BASE_T + 0.004, 0.034, -0.35);  // thumb on top
+      const wrist = new THREE.Mesh(new THREE.CylinderGeometry(0.028, 0.032, 0.05, 14), glove);
+      wrist.rotation.x = Math.PI / 2 - 0.5; wrist.position.set(EDGE - 0.002, -0.03, 0.058); lapHand.add(wrist);
       const arm = new THREE.Mesh(new THREE.CylinderGeometry(0.036, 0.044, 0.34, 10), sleeve);
-      arm.rotation.x = Math.PI / 2 - 0.45; arm.position.set(LAP_W / 2 - 0.01, -0.07, 0.17); lapHand.add(arm);
-      // inspect: one finger up under the centre of the base
-      hb(lapFinger, 0.013, 0.05, 0.013, skin, 0, -0.026, 0);
-      hb(lapFinger, 0.034, 0.032, 0.038, glove, 0.004, -0.066, 0.006);
-      const arm2 = new THREE.Mesh(new THREE.CylinderGeometry(0.034, 0.042, 0.3, 10), sleeve);
-      arm2.rotation.x = Math.PI / 2 - 0.8; arm2.position.set(0.02, -0.14, 0.1); lapFinger.add(arm2);
+      arm.rotation.x = Math.PI / 2 - 0.5; arm.position.set(EDGE, -0.1, 0.21); lapHand.add(arm);
+      // inspect: a fist with one gloved finger up under the centre of the base
+      const finger = new THREE.Mesh(new THREE.CylinderGeometry(0.0055, 0.0065, 0.04, 10), glove);
+      finger.position.set(0, -0.02, 0); lapFinger.add(finger);
+      blob(lapFinger, 0.024, 0.02, 0.026, 0.004, -0.05, 0.004);                        // fist
+      const arm2 = new THREE.Mesh(new THREE.CylinderGeometry(0.034, 0.042, 0.34, 10), sleeve);
+      arm2.rotation.x = 0.12; arm2.position.set(0.012, -0.23, 0.03); lapFinger.add(arm2);
       lapFinger.visible = false;
     }
 
-    // What the laptop screen shows: black when idle, the panel name when you're close,
-    // a terminal typing the connection while you "enter" it.
+    // What the laptop screen shows: black when idle, the target when you're close, and while you
+    // jack in, a terminal cracking the workstation (or just connecting, if it's already yours).
     let screenKey = '';
-    function drawScreen(mode, def, progress = 1) {
+    function drawScreen(mode, def, progress = 1, fresh = false) {
       if (mode === 'connect' && !def) return;   // keep showing the finished connection
-      const key = mode + (def ? def.id : '') + (mode === 'connect' ? Math.floor(progress * 12) : '');
+      const key = mode + (def ? def.id : '') + (mode === 'connect' ? Math.floor(progress * 24) + fresh : '') + (map ? map.name : '');
       if (key === screenKey) return;
       screenKey = key;
       const g = screenCtx, W = 512, H = 340;
+      const hack = map && map.verb === 'hack';
       if (mode === 'off') {
         g.fillStyle = '#050506'; g.fillRect(0, 0, W, H);
         const grd = g.createLinearGradient(0, 0, W, H);
@@ -742,23 +680,35 @@
       } else {
         g.fillStyle = '#0d120c'; g.fillRect(0, 0, W, H);
         g.fillStyle = '#4a5942'; g.fillRect(0, 0, W, 34);
-        g.font = '20px ArialPixel, monospace'; g.textBaseline = 'middle';
-        g.fillStyle = '#fff'; g.fillText('recruiter@de_dust2_cv', 14, 18);
+        g.font = '20px ArialPixel, monospace'; g.textBaseline = 'middle'; g.textAlign = 'left';
+        g.fillStyle = '#fff'; g.fillText('recruiter@' + (map ? map.name : ''), 14, 18);
         if (mode === 'wake') {
+          const open = !hack || isDone(def);
           g.fillStyle = '#c4b550'; g.font = '34px ArialPixel, monospace';
-          g.fillText(def.heading, 24, 120);
+          g.fillText(hack ? def.host : def.heading, 24, 110);
           g.fillStyle = '#a0aa95'; g.font = '22px ArialPixel, monospace';
-          g.fillText(def.title, 24, 166);
-          g.fillStyle = '#dedfd6'; g.fillText('[E]  connect', 24, 260);
+          g.fillText(hack ? (open ? def.heading + ' · yours' : 'locked · ' + def.heading) : def.title, 24, 156);
+          g.fillStyle = '#dedfd6'; g.fillText(!hack ? '[E]  connect' : open ? '[E]  open ' + def.file : '[E]  hack', 24, 260);
         } else {
-          const lines = [`$ ssh ${def.id}.panel`, 'Connecting to', `  ${def.heading}...`, 'Handshake OK', 'Connected.'];
+          const lines = hack && fresh
+            ? [`$ ssh recruiter@${def.host}`, 'Password: ********', 'cracking hash...', 'ACCESS GRANTED', `$ scp ${def.file} ~/`, 'Download complete.']
+            : hack ? [`$ ssh recruiter@${def.host}`, 'Key accepted.', `$ open ~/${def.file}`]
+            : [`$ ssh ${def.id}.panel`, 'Connecting to', `  ${def.heading}...`, 'Handshake OK', 'Connected.'];
           const shown = Math.max(1, Math.ceil(progress * lines.length));
+          const lh = lines.length > 5 ? 40 : 44;
           g.font = '24px ArialPixel, monospace';
           lines.slice(0, shown).forEach((t, i) => {
-            g.fillStyle = i === lines.length - 1 ? '#7fe07f' : (i === 0 ? '#c4b550' : '#dedfd6');
-            g.fillText(t, 20, 74 + i * 44);
+            const ok = /GRANTED|complete|Connected|accepted/.test(t);
+            g.fillStyle = ok ? '#7fe07f' : (t.startsWith('$') ? '#c4b550' : '#dedfd6');
+            g.fillText(t, 20, 70 + i * lh);
           });
-          if (progress < 1) { g.fillStyle = '#dedfd6'; g.fillRect(20, 74 + shown * 44 - 12, 12, 24); }
+          // the cracking line gets a progress bar while it's the last one shown
+          if (hack && fresh && shown === 3) {
+            const f = progress * lines.length - 2;
+            g.strokeStyle = '#dedfd6'; g.strokeRect(250, 70 + 2 * lh - 10, 230, 20);
+            g.fillStyle = '#7fe07f'; g.fillRect(253, 70 + 2 * lh - 7, 224 * Math.min(1, f), 14);
+          }
+          if (progress < 1) { g.fillStyle = '#dedfd6'; g.fillRect(20, 70 + shown * lh - 12, 12, 24); }
         }
         for (let y = 0; y < H; y += 3) { g.fillStyle = 'rgba(0,0,0,.18)'; g.fillRect(0, y, W, 1); }
       }
@@ -769,7 +719,7 @@
     // Poses (position/rotation of lapRoot, lid angle, spin), blended by the animations
     const HOLD = { x: 0.11, y: -0.19, z: -0.36, rx: 0.42, ry: -0.42, rz: 0.1, lid: -0.28, spin: 0 };
     const ENTER = d => ({ x: 0, y: -(BASE_T + LID_H / 2), z: -d + LAP_D / 2, rx: 0, ry: 0, rz: 0, lid: 0, spin: 0 });
-    const BALANCE = { x: 0.04, y: -0.075, z: -0.36, rx: 0.75, ry: 0, rz: 0, lid: Math.PI / 2 - 0.03, spin: 0 };
+    const BALANCE = { x: 0, y: -0.035, z: -0.4, rx: 0.2, ry: 0, rz: 0, lid: Math.PI / 2 - 0.03, spin: 0 };
     const lerpPose = (a, b, k) => {
       const o = {};
       for (const key in a) o[key] = a[key] + (b[key] - a[key]) * k;
@@ -779,14 +729,87 @@
     const easeIn = k => k * k;
     const easeOut = k => 1 - (1 - k) * (1 - k);
 
+    /* ------------------------------------- real CS hands (local assets only) */
+    // When your own CS 1.6 view-model hands are available, the laptop sits in the C4 grip
+    // and the inspect spin balances on the C4 "press button" finger.
+    const realHands = assets && assets.hands ? assets.hands : null;
+    let laptopHands = null, spinHand = null;
+    const SPIN_SHIFT = new V3();
+    function handMesh(json) {
+      const grp = new THREE.Group();
+      for (const g of json.groups) {
+        const geo = new THREE.BufferGeometry();
+        geo.setAttribute('position', new THREE.Float32BufferAttribute(g.position, 3));
+        geo.setAttribute('normal', new THREE.Float32BufferAttribute(g.normal, 3));
+        geo.setAttribute('uv', new THREE.Float32BufferAttribute(g.uv, 2));
+        grp.add(new THREE.Mesh(geo, new THREE.MeshLambertMaterial({ map: g.tex, side: THREE.DoubleSide })));
+      }
+      return grp;
+    }
+    if (realHands) {
+      // laptop: base where the C4 was, keyboard up, held by both gloves
+      laptopHands = handMesh(realHands.laptop);
+      vmRoot.add(laptopHands);
+      const lg = realHands.laptopGrip;
+      const basis = new THREE.Matrix4().makeBasis(new V3(...lg.x).normalize(), new V3(...lg.y).normalize(), new V3(...lg.z).normalize());
+      const e = new THREE.Euler().setFromQuaternion(new THREE.Quaternion().setFromRotationMatrix(basis), 'YXZ');
+      Object.assign(HOLD, { x: lg.pos[0], y: lg.pos[1], z: lg.pos[2], rx: e.x, ry: e.y, rz: e.z });
+      // inspect: the pointing hand, moved so its fingertip is centred at eye level
+      spinHand = handMesh(realHands.spin);
+      spinHand.visible = false;
+      vmRoot.add(spinHand);
+      const tip = new V3(...realHands.spinTip), target = new V3(0, -0.03, -0.36);
+      SPIN_SHIFT.copy(target).sub(tip);
+      Object.assign(BALANCE, { x: target.x, y: target.y + 0.002, z: target.z, rx: 0.15, ry: 0, rz: 0 });
+      lapHand.visible = false;
+    }
+
+    /* ----------------------------- MacBook view model from Blender (local assets only) */
+    // Hands and laptop are one skinned model posed from the camera, so it sits at the view-model
+    // origin. Clip times are set by hand each frame: idle/walk blend by speed (walk synced to the
+    // footstep bob) and enter plays forwards into a panel and backwards on the way out.
+    const lapGltf = assets && assets.laptopModel ? assets.laptopModel : null;
+    let lapModel = null, lapMixer = null;
+    const lapClips = {};
+    if (lapGltf) {
+      lapModel = lapGltf.scene;
+      lapModel.traverse(o => {
+        if (!o.isMesh) return;
+        o.frustumCulled = false;   // skinned: the bind-pose bounds don't follow the animation
+        if (o.name === 'Screen') {
+          screenTex.flipY = false;   // glTF UVs start top-left
+          o.material = new THREE.MeshBasicMaterial({ map: screenTex, toneMapped: false });
+          return;
+        }
+        const m = o.material;      // plain Lambert like the rest of the view model (no env map here)
+        o.material = new THREE.MeshLambertMaterial({
+          map: m.map, color: m.color, transparent: m.transparent, opacity: m.opacity,
+          alphaTest: m.alphaTest, side: m.side, depthWrite: m.depthWrite,
+        });
+      });
+      lapModel.visible = false;
+      vmRoot.add(lapModel);
+      lapMixer = new THREE.AnimationMixer(lapModel);
+      for (const clip of lapGltf.animations) {
+        const action = lapMixer.clipAction(clip);
+        action.play();
+        action.setEffectiveWeight(0);
+        lapClips[clip.name.replace('laptop_', '')] = { action, dur: clip.duration };
+      }
+      lapRoot.visible = false;
+      if (laptopHands) laptopHands.visible = false;
+    }
+    const lapReady = !!(lapModel && lapClips.idle && lapClips.walk && lapClips.enter);
+    const lapInspReady = lapReady && !!(lapClips.inspect && lapClips.inspect_in && lapClips.inspect_out);
+    let lapInsp = null;          // F with the MacBook: { phase: 'in' | 'spin' | 'out', t, held }
+
     /* --------------------------------------------------------- player */
     const R = 0.4, STAND = 1.83, DUCK = 1.15, EYE_STAND = 1.63, EYE_DUCK = 0.98;
     const STEP = 0.46, GRAVITY = 20.3, JUMP = 6.8;
     const MAXSPEED = 6.35, WALK = 0.52, DUCKSPEED = 0.34;
     const ACCEL = 5, AIRACCEL = 10, AIRCAP = 0.76, FRICTION = 4, STOPSPEED = 2.54;
-    const SPAWN = { x: 0, y: 0, z: 18.5, yaw: 0 };
-    const P = {
-      pos: new V3(SPAWN.x, SPAWN.y, SPAWN.z), vel: new V3(), yaw: SPAWN.yaw, pitch: 0,
+    const P = {   // the map puts you at its spawn
+      pos: new V3(), vel: new V3(), yaw: 0, pitch: 0,
       h: STAND, eye: EYE_STAND, ducked: false, onGround: true, punch: 0,
     };
 
@@ -889,49 +912,40 @@
       if (P.onGround && !wasOnGround && fallSpeed < -4) Sound.land();
     }
 
-    /* ---------------------------------------------------------- mouse */
+    /* ---------------------------------------------------------- click */
     const ray = new THREE.Raycaster();
     const center = new THREE.Vector2(0, 0);
-    let press = 0;
     function click() {
-      if (anim && anim.type === 'inspect') anim = null;
-      press = 1;
       Sound.click();
       hud.cursor.classList.add('down');
       setTimeout(() => hud.cursor.classList.remove('down'), 90);
       if (lookTarget) usePanel(lookTarget);
     }
 
-    /* ------------------------------------------------ gear + animations */
+    /* ------------------------------------------------------ animations */
     const reducedMotion = matchMedia('(prefers-reduced-motion: reduce)').matches;
-    let gear = 'mouse';          // 'mouse' | 'laptop'
-    let gearChosen = false;
-    let anim = null;             // { type: 'enter' | 'exit' | 'inspect' | 'draw', t, dur, def }
+    let anim = null;             // { type: 'enter' | 'exit' | 'inspect', t, dur, def, fresh }
     function startAnim(type, def) {
-      const durs = { enter: 1.15, exit: 0.6, inspect: gear === 'laptop' ? 2.6 : 1.4, draw: 0.35 };
-      anim = { type, t: 0, dur: reducedMotion && type !== 'draw' ? Math.min(durs[type], 0.35) : durs[type], def };
-    }
-    function setGear(g, announce = true) {
-      gearChosen = true;
-      if (g === gear) return;
-      gear = g;
-      startAnim('draw');
-      if (announce) { Sound.click(); chat(`* Equipped <span class="g">${g === 'laptop' ? 'MacBook' : 'Mouse'}</span>`); }
+      const durs = { enter: lapReady ? lapClips.enter.dur : 1.15, exit: 0.6, inspect: 4.2 };
+      anim = { type, t: 0, dur: reducedMotion ? Math.min(durs[type], 0.35) : durs[type], def };
     }
     function usePanel(def) {
-      if (gear === 'laptop') {
-        if (anim && anim.type === 'enter') return;
-        state = 'anim';
-        hud.use.hidden = true;
-        fxEl.hidden = false; fxEl.style.opacity = 0;
-        Sound.use();
-        startAnim('enter', def);
-      } else {
-        openPanel(def);
-      }
+      if ((anim && anim.type === 'enter') || lapInsp || def.locked) return;
+      state = 'anim';
+      hud.use.hidden = true;
+      fxEl.hidden = false; fxEl.style.opacity = 0;
+      Sound.use();
+      startAnim('enter', def);
+      anim.fresh = map.verb === 'hack' && !isDone(def);
+      if (anim.fresh) hackDef = def;
     }
     function inspect() {
       if (anim) return;
+      if (lapReady) {
+        // throw it up onto the middle finger; it keeps spinning while F is held
+        if (lapInspReady && !lapInsp) lapInsp = { phase: 'in', t: 0, held: true };
+        return;
+      }
       startAnim('inspect');
     }
 
@@ -959,34 +973,20 @@
       hud.delta.classList.add('show');
       setTimeout(() => hud.delta.classList.remove('show'), 1800);
     }
-    function renderScoreboard() {
-      const rows = panelDefs.map(d =>
-        `<tr class="${read.has(d.id) ? 'done' : 'todo'}"><td>${d.heading}</td><td>${read.has(d.id) ? 'read' : '—'}</td></tr>`).join('');
-      hud.score.innerHTML = `
-        <header><span>Counter-Strike · de_dust2_cv</span><span>${read.size}/${panelDefs.length} read</span></header>
-        <table>
-          <thead><tr><th>Counter-Terrorists</th><th>Score</th><th>Deaths</th><th>Latency</th></tr></thead>
-          <tbody><tr><td>Recruiter (you)</td><td>${read.size}</td><td>0</td><td>5</td></tr>
-          <tr><td>João Furukawa</td><td>∞</td><td>0</td><td>1</td></tr></tbody>
-        </table>
-        <table style="margin-top:12px"><thead><tr><th>Objectives</th><th>Status</th></tr></thead><tbody>${rows}</tbody></table>`;
-    }
-
     const radarG = hud.radar.getContext('2d');
-    const areas = [[-6, 10, 12, 12], [-3, -10, 6, 19], [-4, -26, 22, 16]];
     function drawRadar() {
-      const g = radarG, S = 300, k = 5.5;
+      const g = radarG, S = 300, R = map.radar, k = R.scale;
       g.clearRect(0, 0, S, S);
       g.save();
       g.beginPath(); g.arc(S / 2, S / 2, S / 2 - 4, 0, 7); g.clip();
       g.fillStyle = 'rgba(0,0,0,.35)'; g.fillRect(0, 0, S, S);
       g.translate(S / 2, S / 2); g.rotate(P.yaw); g.scale(k, k); g.translate(-P.pos.x, -P.pos.z);
-      g.fillStyle = 'rgba(210,190,140,.35)';
-      for (const [x, z, w, d] of areas) g.fillRect(x, z, w, d);
-      for (const s of panels) {
-        const d = s.userData.panel;
-        g.fillStyle = read.has(d.id) ? 'rgba(90,230,90,.95)' : 'rgba(255,190,40,.95)';
-        g.fillRect(d.at[0] - 0.9, d.at[2] - 0.9, 1.8, 1.8);
+      g.fillStyle = R.color;
+      for (const [x, z, w, d] of R.areas) g.fillRect(x, z, w, d);
+      const dot = R.dot || 1.8;
+      for (const d of map.terminals) {
+        g.fillStyle = d.locked ? 'rgba(230,60,50,.95)' : isDone(d) ? 'rgba(90,230,90,.95)' : 'rgba(255,190,40,.95)';
+        g.fillRect(d.at[0] - dot / 2, d.at[2] - dot / 2, dot, dot);
       }
       g.restore();
       g.strokeStyle = 'rgba(255,168,0,.5)'; g.lineWidth = 3;
@@ -1015,6 +1015,7 @@
       return w;
     }
     function buildMotd() {
+      const hack = map.verb === 'hack';
       const w = document.createElement('div');
       w.className = 'cs-dialog window motd';
       w.style.maxWidth = '520px';
@@ -1022,44 +1023,48 @@
         <div class="heading"><div class="wrapper"><div class="icon"></div><div class="text">Message of the Day</div></div>
           <a class="cs-btn close" href="#top" aria-label="Close"></a></div>
         <div class="content">
-          <h2>Welcome to de_dust2_cv</h2>
-          <p style="margin-top:8px">Find the six panels on the walls and walk up to one. With the <span class="accent">mouse</span>, click it (or press E). With the <span class="accent">MacBook</span>, press E to jack into it.</p>
+          <h2>Welcome to ${map.name}</h2>
+          <p style="margin-top:8px">${map.motd}</p>
           <dl class="keys">
             <dt>W A S D</dt><dd>Move</dd>
-            <dt>Mouse</dt><dd>Look · click a panel to open it</dd>
+            <dt>Mouse</dt><dd>Look</dd>
             <dt>Space</dt><dd>Jump</dd>
             <dt>C</dt><dd>Crouch (crouch-jump onto crates)</dd>
             <dt>Shift</dt><dd>Walk quietly</dd>
-            <dt>E / click</dt><dd>Open or connect to a panel</dd>
-            <dt>F</dt><dd>Inspect</dd>
-            <dt>1 / 2</dt><dd>Mouse / MacBook</dd>
-            <dt>Tab</dt><dd>Scoreboard</dd>
-            <dt>Esc</dt><dd>Menu</dd>
+            <dt>E / click</dt><dd>${hack ? 'Hack a workstation' : 'Connect to a panel'}</dd>
+            <dt>F</dt><dd>Inspect (hold to keep it spinning)</dd>
+            <dt>Tab</dt><dd>Files on your MacBook</dd>
+            <dt>Esc</dt><dd>Menu (change map, contact)</dd>
           </dl>
         </div>
         <div class="footer-btns"><a class="cs-btn" href="#top">OK</a></div>`;
       return w;
     }
-    function buildGear() {
+    // Tab: what you've pulled onto the MacBook so far. Click a file to read it again.
+    function buildFiles() {
+      const have = FILES.filter(f => read.has(f.key)).length;
       const w = document.createElement('div');
-      w.className = 'cs-dialog window gear';
-      w.style.maxWidth = '560px';
+      w.className = 'cs-dialog window files';
+      w.style.maxWidth = '620px';
+      const rows = FILES.map(f => {
+        const got = read.has(f.key);
+        const where = map.terminals.find(d => d.keys.includes(f.key));
+        const hint = !where ? 'not on this map' : where.locked ? 'server room' : map.verb === 'hack' ? 'locked · ' + where.host : where.heading;
+        return got
+          ? `<li><button type="button" class="file-row" data-file="${f.key}"><span class="name">${f.file}</span><span class="what">${f.heading}</span></button></li>`
+          : `<li><div class="file-row missing"><span class="name">???</span><span class="what">${hint}</span></div></li>`;
+      }).join('');
       w.innerHTML = `
-        <div class="heading"><div class="wrapper"><div class="icon"></div><div class="text">Choose your gear</div></div>
+        <div class="heading"><div class="wrapper"><div class="icon"></div><div class="text">Files — recruiter's MacBook</div></div>
           <a class="cs-btn close" href="#top" aria-label="Close"></a></div>
         <div class="content">
-          <p>How do you want to read this CV?</p>
-          <div class="gear-list">
-            <a href="#" class="gear-opt" data-gear="mouse"><span class="key">1</span><b>Mouse</b>
-              <span class="muted">Point and click. Panels open instantly.</span></a>
-            <a href="#" class="gear-opt" data-gear="laptop"><span class="key">2</span><b>MacBook</b>
-              <span class="muted">Walk up to a panel and press E to jack into it. F to show off.</span></a>
-          </div>
-          <p class="muted">Switch any time with 1 / 2.</p>
-        </div>`;
+          <p class="files-sum"><span class="accent">${have}/${FILES.length}</span> files downloaded · ${map.name}: ${doneCount()}/${objectives().length} ${map.verb === 'hack' ? 'hacked' : 'read'}</p>
+          <ul class="file-list">${rows}</ul>
+        </div>
+        <div class="footer-btns"><a class="cs-btn" href="#top">OK</a></div>`;
       return w;
     }
-    const windowFor = {
+    const sectionWin = {
       about: () => aboutWin || (aboutWin = buildAbout()),
       career: () => $('#career'),
       work: () => $('#projects'),
@@ -1067,47 +1072,85 @@
       skills: () => $('#skills'),
       contact: () => $('#contact'),
     };
+    // A skill desk only holds its own category: hide the other blocks of the Skills window.
+    function focusSkills(win, f) {
+      const cat = f && f.category;
+      win.classList.toggle('one-category', !!cat);
+      for (const b of win.querySelectorAll('[data-category]')) b.classList.toggle('cat-hidden', !!cat && b.dataset.category !== cat);
+      for (const i of win.querySelectorAll('.inset')) i.classList.toggle('cat-hidden', !!cat && !i.querySelector(`[data-category="${cat}"]`));
+      const t = $('.heading .text', win);
+      if (t) {
+        if (t.dataset.orig == null) t.dataset.orig = t.textContent;
+        t.textContent = cat ? `Skills — ${f.heading}` : t.dataset.orig;
+      }
+    }
 
     let state = 'off';        // off | playing | paused | modal
-    let modal = null;         // { el, parent, next }
+    let modal = null;         // { el, parent, next, viaLaptop, mac, back, kind, file }
     let motdShown = false;
 
-    function openWindow(win, viaLaptop = false) {
-      modal = { el: win, parent: win.parentNode, next: win.nextSibling, viaLaptop };
-      if (viaLaptop) {
+    // opts.laptop: you jacked in (the exit animation plays on close); opts.mac: shown on the MacBook
+    // screen; opts.back: 'files' returns to the file browser on close; opts.file: which CV file it is
+    function openWindow(win, opts = {}) {
+      const mac = !!(opts.laptop || opts.mac);
+      modal = { el: win, parent: win.parentNode, next: win.nextSibling, viaLaptop: !!opts.laptop, mac, back: opts.back, kind: opts.kind, file: opts.file };
+      if (mac) {
         win.classList.add('crt-in');
         win.addEventListener('animationend', () => win.classList.remove('crt-in'), { once: true });
       }
+      if (opts.file && opts.file.section === 'skills') focusSkills(win, opts.file);
+      modalEl.classList.toggle('mac', mac);
+      macPath.textContent = opts.kind === 'files' ? 'recruiter@MacBook: ~/' : opts.file ? `recruiter@MacBook: ~/${opts.file.file}` : '';
+      macClock.textContent = hhmm();
       modalInner.appendChild(win);
+      modalInner.scrollTop = 0;
       modalEl.hidden = false;
       pauseEl.hidden = true;
       hud.root.hidden = true;
       state = 'modal';
       if (document.pointerLockElement) document.exitPointerLock();
-      const first = win.querySelector('input, a, button');
+      const first = win.querySelector('button.file-row, input, a, button');
       if (first) first.focus({ preventScroll: true });
     }
     function openPanel(def, viaLaptop = false) {
       if (!viaLaptop) Sound.use();
-      openWindow(windowFor[def.id](), viaLaptop);
-      if (!read.has(def.id)) {
-        read.add(def.id);
-        hud.read.textContent = `${read.size}/${panelDefs.length}`;
-        hud.count.textContent = read.size;
-        chat(`<span class="g">* Objective:</span> read ${def.heading}`);
-        addMoney(300);
-        if (read.size === panelDefs.length) setTimeout(() => centerMsg('Counter-Terrorists Win', 4), 400);
+      const f = def.section === 'skills' && def.keys.length === 1 ? fileFor(def.keys[0]) : fileFor(def.section);
+      openWindow(sectionWin[def.section](), { laptop: viaLaptop, file: f });
+      if (hackDef === def) hackDef = null;
+      if (isDone(def)) return;
+      for (const k of def.keys) read.add(k);
+      updateProgress();
+      chat(`<span class="g">* Objective:</span> ${map.verb === 'hack' ? 'hacked ' + def.host : 'read ' + def.heading}`);
+      addMoney(300);
+      const n = doneCount(), tot = objectives().length;
+      if (def.finale) setTimeout(() => centerMsg('Counter-Terrorists Win', 4), 400);
+      else if (n === tot) {
+        if (map.unlock) {
+          map.unlock();
+          setTimeout(() => { centerMsg('Server room unlocked', 4); chat('<span class="ct">Radio:</span> The server room is open. Get the contact details out.'); }, 400);
+        } else setTimeout(() => centerMsg('Counter-Terrorists Win', 4), 400);
       }
     }
+    function openFiles() {
+      Sound.use();
+      openWindow(buildFiles(), { mac: true, kind: 'files' });
+    }
+    function openFile(f, back = 'files') {
+      openWindow(sectionWin[f.section](), { mac: true, file: f, back });
+    }
     function restoreModal() {
-      if (modal.parent) modal.parent.insertBefore(modal.el, modal.next);
-      else modal.el.remove();
+      const win = modal.el;
+      if (modal.file && modal.file.section === 'skills') focusSkills(win, null);
+      if (modal.parent) modal.parent.insertBefore(win, modal.next);
+      else win.remove();
       modal = null;
       modalEl.hidden = true;
+      modalEl.classList.remove('mac');
       hud.root.hidden = false;
     }
     function closeModal(relock) {
       if (!modal || modal.closing) return;
+      if (modal.back === 'files') { restoreModal(); openFiles(); return; }
       if (relock) lock();   // request it now, while we still have the click's user gesture
       if (!modal.viaLaptop) {
         restoreModal();
@@ -1125,31 +1168,33 @@
         startAnim('exit');
       }, reducedMotion ? 10 : 220);
     }
-    function chooseGear(g) {
-      setGear(g, gearChosen);
-      closeModal(true);
-    }
     modalEl.addEventListener('click', e => {
       if (e.target === modalEl) { closeModal(true); return; }
-      const opt = e.target.closest('[data-gear]');
-      if (opt) { e.preventDefault(); chooseGear(opt.dataset.gear); return; }
+      const row = e.target.closest('button[data-file]');
+      if (row) { Sound.use(); restoreModal(); openFile(fileFor(row.dataset.file)); return; }
       const a = e.target.closest('a');
       if (!a) return;
       const href = a.getAttribute('href') || '';
       if (href.startsWith('#')) {
         e.preventDefault();
-        // first time: after the welcome message comes the gear choice
-        if (modal && modal.el.classList.contains('motd') && !gearChosen) { restoreModal(); openWindow(buildGear()); return; }
         closeModal(true);
       }
       else if (/^https?:/.test(href)) { e.preventDefault(); open(href, '_blank', 'noopener'); }
+    });
+    // arrow keys move between files in the browser
+    modalEl.addEventListener('keydown', e => {
+      if (!modal || modal.kind !== 'files' || !/^Arrow(Up|Down)$/.test(e.key)) return;
+      const rows = [...modalEl.querySelectorAll('button.file-row')];
+      if (!rows.length) return;
+      e.preventDefault();
+      const i = rows.indexOf(document.activeElement);
+      rows[(i + (e.key === 'ArrowDown' ? 1 : -1) + rows.length) % rows.length].focus();
     });
 
     function showPause() {
       state = 'paused';
       pauseEl.hidden = false;
       hud.use.hidden = true;
-      hud.score.hidden = true;
     }
     pauseEl.addEventListener('click', e => {
       const a = e.target.closest('a[data-act]');
@@ -1157,8 +1202,10 @@
       e.preventDefault();
       const act = a.dataset.act;
       if (act === 'resume') lock();
+      else if (act === 'files') openFiles();
+      else if (act === 'contact') openFile(fileFor('contact'), null);
+      else if (act === 'map') switchMap(MAPS.find(n => n !== map.name));
       else if (act === 'motd') openWindow(buildMotd());
-      else if (act === 'gear') openWindow(buildGear());
       else if (act === 'classic') exit('#desktop');
       else if (act === 'quit') exit('#top');
     });
@@ -1182,7 +1229,7 @@
         showPause();
       } else if (state === 'anim') {
         // Esc during the "enter" animation: cancel it
-        anim = null; fxEl.hidden = true; screenKey = '';
+        anim = null; hackDef = null; fxEl.hidden = true; screenKey = '';
         showPause();
       }
     });
@@ -1206,25 +1253,22 @@
       if (state === 'off') return;
       if (state === 'modal') {
         if (e.key === 'Escape') { e.preventDefault(); closeModal(false); }
-        else if (modal && modal.el.classList.contains('gear') && (e.code === 'Digit1' || e.code === 'Digit2')) {
-          chooseGear(e.code === 'Digit1' ? 'mouse' : 'laptop');
-        }
+        // Tab closes the file browser again (inside a CV window it moves focus as usual)
+        else if (e.code === 'Tab' && modal && modal.kind === 'files') { e.preventDefault(); closeModal(true); }
         return;
       }
       if (state !== 'playing') return;
-      if (e.code === 'Tab') { e.preventDefault(); renderScoreboard(); hud.score.hidden = false; return; }
+      if (e.code === 'Tab') { e.preventDefault(); if (!e.repeat && !anim && !lapInsp) openFiles(); return; }
       if (e.code === 'Space') { e.preventDefault(); if (!e.repeat) jumpQueued = true; }
       if (e.code === 'KeyE' && !e.repeat && lookTarget) usePanel(lookTarget);
       if (e.code === 'KeyF' && !e.repeat) inspect();
-      if (e.code === 'Digit1') setGear('mouse');
-      if (e.code === 'Digit2') setGear('laptop');
       keys[e.code] = true;
     });
     addEventListener('keyup', e => {
       keys[e.code] = false;
-      if (e.code === 'Tab') hud.score.hidden = true;
+      if (e.code === 'KeyF' && lapInsp) lapInsp.held = false;
     });
-    addEventListener('blur', () => { for (const k in keys) keys[k] = false; });
+    addEventListener('blur', () => { for (const k in keys) keys[k] = false; if (lapInsp) lapInsp.held = false; });
 
     /* ---------------------------------------------------------- frame */
     let last = 0, bob = 0, stepDist = 0;
@@ -1265,8 +1309,6 @@
         if (speed > 3.9) { stepDist += speed * dt; if (stepDist > 1.7) { stepDist = 0; Sound.step(); } }
       }
       const moveK = P.onGround ? Math.min(1, speed / MAXSPEED) : 0;
-      press *= Math.max(0, 1 - dt * 14);
-      pressParts.forEach(p => { p.position.y = p.userData.y - press * 0.0035; });
       vmRoot.position.copy(camera.position);
       vmRoot.quaternion.copy(camera.quaternion);
 
@@ -1275,7 +1317,7 @@
       if (anim) {
         anim.t += dt;
         k = Math.min(1, anim.t / anim.dur);
-        if (anim.type === 'enter') fxEl.style.opacity = Math.max(0, (k - 0.62) / 0.38);
+        if (anim.type === 'enter') fxEl.style.opacity = Math.max(0, (k - 0.88) / 0.12);   // fade in on the last third of the zoom
         if (k >= 1) {
           const done = anim;
           anim = null;
@@ -1290,14 +1332,62 @@
       if (anim && anim.type === 'exit') fxEl.style.opacity = 1 - k * 1.6;
       const bobX = Math.sin(bob * 1.4) * 0.008 * moveK;
       const bobY = -Math.abs(Math.cos(bob * 1.4)) * 0.01 * moveK + (P.onGround ? 0 : 0.01);
-      const drawOff = anim && anim.type === 'draw' ? (1 - easeOut(k)) * 0.25 : 0;
 
-      vm.visible = gear === 'mouse';
-      lapRoot.visible = gear === 'laptop';
-      if (gear === 'mouse') {
-        const tw = anim && anim.type === 'inspect' ? ease(k) : 0;
-        vm.position.set(VM_BASE.x + bobX - tw * 0.05, VM_BASE.y + bobY - drawOff + Math.sin(tw * Math.PI) * 0.05, VM_BASE.z - press * 0.006);
-        vm.rotation.set(0.55 - press * 0.03 + Math.sin(tw * Math.PI) * 0.4, -0.25 + tw * Math.PI * 4, 0.05);
+      lapRoot.visible = !lapReady;
+      if (laptopHands) laptopHands.visible = !lapReady;
+      if (lapModel) lapModel.visible = lapReady;
+      if (spinHand) spinHand.visible = false;
+      if (lapReady) {
+        // enter takes over quickly from idle/walk; exit plays it backwards
+        const A = anim ? anim.type : '';
+        let e = 0, et = 0;
+        if (A === 'enter') { e = Math.min(1, k / 0.08); et = k; }
+        else if (A === 'exit') { e = Math.min(1, (1 - k) / 0.08); et = 1 - k; }
+        else if (modal && modal.viaLaptop) { e = 1; et = 1; }
+        const I = lapClips.idle, W = lapClips.walk, N = lapClips.enter;
+        // F: throw it up onto the middle finger, spin while F is held, catch it and reopen it on release
+        let iw = 0, wIn = 0, wSpin = 0, wOut = 0;
+        if (lapInsp) {
+          const s = lapInsp, Xi = lapClips.inspect_in, Xs = lapClips.inspect, Xo = lapClips.inspect_out;
+          s.t += dt;
+          if (s.phase === 'in' && s.t >= Xi.dur) {
+            s.t -= Xi.dur;
+            s.phase = s.held ? 'spin' : 'out';
+          }
+          if (s.phase === 'spin' && !s.held) {
+            // let go on the next half turn of the loop, where the laptop lines up with the catch
+            const half = Xs.dur / 2;
+            if (s.releaseAt == null) s.releaseAt = Math.max(1, Math.ceil(s.t / half)) * half;
+            if (s.t >= s.releaseAt) { s.phase = 'out'; s.spinT = s.releaseAt; s.t -= s.releaseAt; }
+          }
+          if (s.phase === 'out' && s.t >= Xo.dur) lapInsp = null;
+          else if (s.phase === 'in') {
+            Xi.action.time = Math.min(s.t, Xi.dur - 1e-4);
+            iw = wIn = Math.min(1, s.t / 0.1);
+          } else if (s.phase === 'spin') {
+            Xs.action.time = s.t % Xs.dur;
+            iw = wSpin = 1;
+          } else {
+            Xo.action.time = Math.min(s.t, Xo.dur - 1e-4);
+            iw = Math.min(1, (Xo.dur - s.t) / 0.1);
+            const f = s.spinT == null ? 1 : Math.min(1, s.t / 0.12);   // short blend out of the spin
+            if (s.spinT != null) Xs.action.time = (s.spinT + s.t) % Xs.dur;
+            wSpin = iw * (1 - f); wOut = iw * f;
+          }
+        }
+        I.action.time = clock % I.dur;
+        W.action.time = (bob * 1.4 / (Math.PI * 2)) % 1 * W.dur;   // same phase as the footstep bob
+        N.action.time = Math.min(et, 0.9999) * N.dur;
+        I.action.setEffectiveWeight((1 - iw) * (1 - e) * (1 - moveK));
+        W.action.setEffectiveWeight((1 - iw) * (1 - e) * moveK);
+        N.action.setEffectiveWeight((1 - iw) * e);
+        if (lapInspReady) {
+          lapClips.inspect_in.action.setEffectiveWeight(wIn);
+          lapClips.inspect.action.setEffectiveWeight(wSpin);
+          lapClips.inspect_out.action.setEffectiveWeight(wOut);
+        }
+        lapMixer.update(0);
+        lapModel.position.set(0, (P.onGround ? 0 : 0.01), 0);
       } else {
         let pose = HOLD, hk = 1, spinning = false, holding = true;
         if (anim && anim.type === 'enter') {
@@ -1306,22 +1396,40 @@
         } else if (anim && anim.type === 'exit') {
           pose = lerpPose(ENTER(0.05), HOLD, ease(k)); hk = k; holding = k > 0.6;
         } else if (anim && anim.type === 'inspect') {
-          if (k < 0.18) pose = lerpPose(HOLD, BALANCE, ease(k / 0.18));
+          if (k < 0.2) pose = lerpPose(HOLD, BALANCE, ease(k / 0.2));
           else if (k < 0.82) {
-            const u = (k - 0.18) / 0.64;
-            pose = { ...BALANCE, spin: easeOut(u) * Math.PI * 10, rz: Math.sin(anim.t * 14) * 0.06 * u, rx: BALANCE.rx + Math.sin(anim.t * 11) * 0.04 * u };
+            const u = (k - 0.2) / 0.62;
+            pose = { ...BALANCE, spin: easeOut(u) * Math.PI * 3, rz: Math.sin(anim.t * 5) * 0.025 * u, rx: BALANCE.rx + Math.sin(anim.t * 4) * 0.02 * u };
           } else pose = lerpPose(BALANCE, HOLD, ease((k - 0.82) / 0.18));
-          spinning = k > 0.12 && k < 0.88;
+          spinning = k > 0.14 && k < 0.88;
           hk = 0.3;
         } else if (modal && modal.viaLaptop) {
           pose = ENTER(0.05); hk = 0; holding = false;
         }
-        lapRoot.position.set(pose.x + bobX * hk, pose.y + bobY * hk - drawOff, pose.z);
+        lapRoot.position.set(pose.x + bobX * hk, pose.y + bobY * hk, pose.z);
         lapRoot.rotation.set(pose.rx, pose.ry, pose.rz);
         lidPivot.rotation.x = pose.lid;
         lapSpin.rotation.y = pose.spin;
-        lapHand.visible = holding && !spinning;
-        lapFinger.visible = spinning;
+        if (realHands) {
+          // the gloves drop out of view while the laptop is up at your face or spinning,
+          // and the pointing hand rises for the spin
+          let drop = 0, rise = 0;
+          const A = anim ? anim.type : '';
+          if (A === 'enter') drop = ease(Math.min(1, k / 0.4));
+          else if (A === 'exit') drop = 1 - ease(k);
+          else if (A === 'inspect') {
+            const inOut = k < 0.2 ? ease(k / 0.2) : k > 0.82 ? 1 - ease((k - 0.82) / 0.18) : 1;
+            drop = inOut; rise = inOut;
+          } else if (modal && modal.viaLaptop) drop = 1;
+          laptopHands.position.set(bobX, bobY - drop * 0.35, 0);
+          laptopHands.visible = drop < 1;
+          spinHand.visible = rise > 0;
+          spinHand.position.set(SPIN_SHIFT.x, SPIN_SHIFT.y - (1 - rise) * 0.35, SPIN_SHIFT.z);
+          lapFinger.visible = false;
+        } else {
+          lapHand.visible = holding && !spinning;
+          lapFinger.visible = spinning;
+        }
       }
 
       // what are we looking at?
@@ -1333,15 +1441,17 @@
         if (hit && hit.object.userData.panel) lookTarget = hit.object.userData.panel;
       }
       hud.use.hidden = !lookTarget;
-      if (lookTarget) hud.use.innerHTML = gear === 'laptop'
-        ? `Press <b>E</b> to connect to <b>${lookTarget.heading}</b>`
-        : `Click or press <b>E</b> to open <b>${lookTarget.heading}</b>`;
-      if (gear === 'laptop') {
-        if (anim && anim.type === 'enter') drawScreen('connect', anim.def, Math.min(1, anim.t / (anim.dur * 0.7)));
-        else if (modal && modal.viaLaptop) drawScreen('connect', null, 1);
-        else if (lookTarget && !(anim && anim.type === 'inspect')) drawScreen('wake', lookTarget);
-        else drawScreen('off');
+      if (lookTarget) {
+        const d = lookTarget;
+        hud.use.innerHTML = map.verb !== 'hack' ? `Press <b>E</b> to connect to <b>${d.heading}</b>`
+          : isDone(d) ? `Press <b>E</b> to open <b>${d.heading}</b>` : `Press <b>E</b> to hack <b>${d.host}</b>`;
       }
+      if (map.update) map.update(dt, clock);
+      for (const d of screens) drawTerminal(d);
+      if (anim && anim.type === 'enter') drawScreen('connect', anim.def, Math.min(1, anim.t / (anim.dur * 0.7)), anim.fresh);
+      else if (modal && modal.viaLaptop) drawScreen('connect', null, 1);
+      else if (lookTarget && !(anim && anim.type === 'inspect') && !lapInsp) drawScreen('wake', lookTarget);
+      else drawScreen('off');
 
       // HUD
       hud.cursor.classList.toggle('over', !!lookTarget);
@@ -1367,7 +1477,7 @@
         openWindow(buildMotd());
         setTimeout(() => {
           chat('<span class="ct">Recruiter</span> is joining the Counter-Terrorist force');
-          chat('* Find the panels and open them (1 / 2 to switch gear)');
+          chat(map.hint);
         }, 300);
       } else {
         showPause();
@@ -1375,7 +1485,7 @@
     }
     function exit(target) {
       if (modal) closeModalSilently();
-      anim = null; fxEl.hidden = true; screenKey = ''; drawScreen('off');
+      anim = null; hackDef = null; fxEl.hidden = true; screenKey = ''; drawScreen('off');
       state = 'off';
       if (document.pointerLockElement) document.exitPointerLock();
       renderer.setAnimationLoop(null);
@@ -1390,6 +1500,8 @@
       modal = null; modalEl.hidden = true; hud.root.hidden = false;
     }
 
+    mapTextures = [];   // the view model's own textures stay when maps change
+    applyMap(firstMap);
     return { enter, exit };
   }
 })();

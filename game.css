@@ -1,4 +1,4 @@
-/* ---------- in-game (de_dust2_cv) ---------- */
+/* ---------- in-game (cs_office_cv / de_dust2_cv) ---------- */
 .in-game body { overflow: hidden; }
 .game { position: fixed; inset: 0; z-index: 90; background: #000; user-select: none; }
 .game[hidden] { display: none; }
@@ -13,14 +13,14 @@
 }
 .hud[hidden] { display: none; }
 
-/* pixel mouse pointer instead of a crosshair; its tip is the centre of the screen */
+/* crosshair: a small white dot in the centre of the screen (gold over a panel) */
 .cursor {
-  position: absolute; left: 50%; top: 50%; width: 15px; height: 24px;
-  fill: #fff; stroke: #000; stroke-width: 1; shape-rendering: crispEdges;
-  filter: drop-shadow(1px 1px 0 rgba(0,0,0,.5));
+  position: absolute; left: 50%; top: 50%; width: 6px; height: 6px; margin: -3px 0 0 -3px;
+  border-radius: 50%; background: #fff; box-shadow: 0 0 0 1px rgba(0, 0, 0, .7);
+  transition: transform .08s;
 }
-.cursor.over { fill: var(--hud); }
-.cursor.down { transform: translate(1px, 1px); }
+.cursor.over { background: var(--hud); transform: scale(1.35); }
+.cursor.down { transform: scale(.7); }
 
 /* bottom row: health, armor | timer | ammo */
 .hud-row {
@@ -58,19 +58,6 @@
 }
 .top-right { position: absolute; right: 18px; top: 14px; text-align: right; font-size: 1.05em; color: #fff; text-shadow: 1px 1px 0 #000; }
 .top-right span { color: var(--hud); }
-
-/* scoreboard (hold Tab) */
-.scoreboard {
-  position: absolute; left: 50%; top: 12%; transform: translateX(-50%);
-  width: min(46em, calc(100vw - 32px)); background: rgba(0, 0, 0, .6); border: 1px solid #000;
-  padding: .8em 1em; color: #fff; font-size: 1em;
-}
-.scoreboard header { display: flex; justify-content: space-between; margin-bottom: 8px; }
-.scoreboard table { width: 100%; border-collapse: collapse; }
-.scoreboard th { text-align: left; font-weight: 400; color: var(--text-3); border-bottom: 1px solid #555; padding: 2px 6px; }
-.scoreboard td { padding: 3px 6px; color: #9fc4ff; }
-.scoreboard tr.done td { color: #7fe07f; }
-.scoreboard tr.todo td { color: #8a8f86; }
 
 /* pause menu (Esc) */
 .game-pause {
@@ -116,14 +103,50 @@
   .game-modal .cs-dialog.crt-in, .game-modal .cs-dialog.crt-out { animation-duration: .01s; }
 }
 
-/* gear select */
-.gear-list { display: grid; gap: 8px; margin: 12px 0; }
-.gear-opt {
-  display: grid; grid-template-columns: 2em 1fr; gap: 2px 10px; align-items: center;
-  padding: 10px 12px; text-decoration: none; color: var(--text); background: var(--secondary-bg);
-  border: 1px solid; border-color: var(--border-dark) var(--border-light) var(--border-light) var(--border-dark);
+/* MacBook: windows you jacked into (and the Tab file browser) show on the laptop's own screen */
+.game-modal:not(.mac) .mac-frame { display: contents; }
+.game-modal:not(.mac) .mac-bar { display: none; }
+.game-modal.mac { background: rgba(0, 0, 0, .7); }
+.game-modal.mac .mac-frame {
+  position: relative; display: flex; flex-direction: column;
+  width: min(1180px, 100%); height: min(780px, 100%);
+  padding: 30px 22px 22px; border-radius: 22px; background: #0a0a0c;
+  box-shadow: 0 0 0 2px #2c2d31, 0 0 0 7px #b9bcc3, 0 0 0 8px #8d9097, 0 30px 90px rgba(0, 0, 0, .7);
 }
-.gear-opt:hover, .gear-opt:focus-visible { background: var(--secondary-accent); outline: 0; }
-.gear-opt:hover .muted, .gear-opt:focus-visible .muted { color: #fff; }
-.gear-opt .key { grid-row: span 2; color: var(--accent); font-size: 1.7em; line-height: 1; text-align: center; }
-.gear-opt b { font-weight: 400; color: #fff; }
+.game-modal.mac .mac-frame::before {   /* the notch */
+  content: ''; position: absolute; left: 50%; top: 0; width: 160px; height: 26px; margin-left: -80px;
+  background: #0a0a0c; border-radius: 0 0 12px 12px; z-index: 2;
+}
+.game-modal.mac .mac-bar {
+  display: flex; justify-content: space-between; align-items: center; gap: 12px;
+  height: 26px; padding: 0 12px; background: rgba(20, 22, 30, .92); color: #d8dbe2;
+  font: 13px -apple-system, "Segoe UI", Arial, sans-serif; border-radius: 6px 6px 0 0;
+}
+.game-modal.mac .mac-bar span { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.game-modal.mac .game-modal-inner {
+  flex: 1; max-width: none; min-height: 0; padding: 18px; align-items: flex-start;
+  background: radial-gradient(ellipse at 30% 20%, #2b3a55 0%, #141a26 55%, #0b0e15 100%);
+  border-radius: 0 0 6px 6px;
+}
+.game-modal.mac .game-modal-inner > .cs-dialog { margin: auto; }
+
+/* Tab: files on the MacBook */
+.files .files-sum { margin-bottom: 10px; }
+.files .file-list { list-style: none; margin: 0; padding: 0; display: grid; gap: 4px; }
+.files .file-row {
+  display: grid; grid-template-columns: 14em 1fr; gap: 12px; width: 100%; text-align: left;
+  padding: 6px 10px; font: inherit; color: var(--text, #dedfd6); background: rgba(0, 0, 0, .18);
+  border: 1px solid transparent;
+}
+.files button.file-row { cursor: pointer; }
+.files button.file-row:hover, .files button.file-row:focus-visible { border-color: var(--accent, #c4b550); background: rgba(0, 0, 0, .3); outline: none; }
+.files .file-row .name { color: var(--accent, #c4b550); }
+.files .file-row.missing { opacity: .55; }
+.files .file-row.missing .name { color: inherit; }
+@media (max-width: 560px) { .files .file-row { grid-template-columns: 1fr; gap: 0; } }
+
+/* a skill desk holds a single category of the Skills window */
+.game-modal .cat-hidden { display: none !important; }
+.game-modal .one-category .skills { grid-template-columns: 1fr; }
+.game-modal .cs-dialog.window.one-category { max-width: 640px; }
+

@@ -13,6 +13,8 @@
   <meta name="twitter:card" content="summary_large_image">
   <link rel="stylesheet" href="https://cdn.jsdelivr.net/gh/ekmas/cs16.css@main/css/cs16.min.css">
   <link rel="stylesheet" href="game.css">
+  <!-- lets three.js add-ons (GLTFLoader) import the same three build the game loads -->
+  <script type="importmap">{ "imports": { "three": "https://cdn.jsdelivr.net/npm/three@0.170.0/build/three.module.js" } }</script>
   <script>
     // Show the "connecting" loader once per browser session (skipped without JS).
     try { if (!sessionStorage.getItem('connected')) document.documentElement.classList.add('loading'); }
@@ -197,6 +199,7 @@
     .soft .cs-checkbox__label { color: var(--accent); }
     .kv { display: grid; grid-template-columns: 6.5em 1fr; gap: 14px 12px; margin-top: 20px; padding-top: 16px; border-top: 1px solid var(--border-dark); box-shadow: inset 0 1px 0 var(--border-light); }
     .kv dt { color: var(--text-3); }
+    .skills [data-category] + [data-category] { margin-top: 18px; }
 
     /* contact */
     .contact-list { display: grid; grid-template-columns: 80px 1fr; gap: 6px 10px; margin-top: 12px; }
@@ -417,33 +420,47 @@
           </div>
           <div class="content">
             <div class="skills">
+              <!-- data-category blocks: in the game each skill desk shows only its own block -->
               <div class="inset">
                 <h2 class="group-title">Hard skills</h2>
-                <div class="skill"><span>JavaScript / TS</span><div class="cs-progress-bar"><div class="bars" style="width:85%"></div></div></div>
-                <div class="skill"><span>React / Next.js</span><div class="cs-progress-bar"><div class="bars" style="width:80%"></div></div></div>
-                <div class="skill"><span>Node.js</span><div class="cs-progress-bar"><div class="bars" style="width:80%"></div></div></div>
-                <div class="skill"><span>Python</span><div class="cs-progress-bar"><div class="bars" style="width:75%"></div></div></div>
-                <div class="skill"><span>SQL / MongoDB</span><div class="cs-progress-bar"><div class="bars" style="width:70%"></div></div></div>
-                <div class="skill"><span>Java</span><div class="cs-progress-bar"><div class="bars" style="width:65%"></div></div></div>
-                <div class="skill"><span>C</span><div class="cs-progress-bar"><div class="bars" style="width:60%"></div></div></div>
-                <dl class="kv">
-                  <dt>AI / ML</dt><dd>RAG, embeddings, vector search, LLM APIs, PyTorch, Scikit-learn, Pandas, NumPy</dd>
-                  <dt>Backend</dt><dd>Express, Flask, Spring Boot, Prisma, PostgreSQL, MongoDB, REST APIs</dd>
-                  <dt>Tools</dt><dd>Git, GitHub/GitLab, Docker, Nginx, Linux, Azure, Postman, Jira</dd>
-                  <dt>Concepts</dt><dd>System design, data structures &amp; algorithms, software testing, accessibility (WCAG)</dd>
-                </dl>
+                <div data-category="frontend">
+                  <div class="skill"><span>JavaScript / TS</span><div class="cs-progress-bar"><div class="bars" style="width:85%"></div></div></div>
+                  <div class="skill"><span>React / Next.js</span><div class="cs-progress-bar"><div class="bars" style="width:80%"></div></div></div>
+                  <dl class="kv"><dt>Frontend</dt><dd>React, Next.js, accessibility (WCAG)</dd></dl>
+                </div>
+                <div data-category="backend">
+                  <div class="skill"><span>Node.js</span><div class="cs-progress-bar"><div class="bars" style="width:80%"></div></div></div>
+                  <div class="skill"><span>SQL / MongoDB</span><div class="cs-progress-bar"><div class="bars" style="width:70%"></div></div></div>
+                  <div class="skill"><span>Java</span><div class="cs-progress-bar"><div class="bars" style="width:65%"></div></div></div>
+                  <div class="skill"><span>C</span><div class="cs-progress-bar"><div class="bars" style="width:60%"></div></div></div>
+                  <dl class="kv"><dt>Backend</dt><dd>Express, Flask, Spring Boot, Prisma, PostgreSQL, MongoDB, REST APIs</dd></dl>
+                </div>
+                <div data-category="ai">
+                  <div class="skill"><span>Python</span><div class="cs-progress-bar"><div class="bars" style="width:75%"></div></div></div>
+                  <dl class="kv"><dt>AI / ML</dt><dd>RAG, embeddings, vector search, LLM APIs, PyTorch, Scikit-learn, Pandas, NumPy</dd></dl>
+                </div>
+                <div data-category="tools">
+                  <dl class="kv">
+                    <dt>Tools</dt><dd>Git, GitHub/GitLab, Docker, Nginx, Linux, Azure, Postman, Jira</dd>
+                    <dt>Concepts</dt><dd>System design, data structures &amp; algorithms, software testing</dd>
+                  </dl>
+                </div>
               </div>
               <div class="inset soft">
-                <h2 class="group-title">Soft skills</h2>
-                <div class="cs-checkbox"><input type="checkbox" id="s1" checked><label class="cs-checkbox__label" for="s1">Problem-solving</label></div>
-                <div class="cs-checkbox"><input type="checkbox" id="s2" checked><label class="cs-checkbox__label" for="s2">Adaptability</label></div>
-                <div class="cs-checkbox"><input type="checkbox" id="s3" checked><label class="cs-checkbox__label" for="s3">Teamwork</label></div>
-                <div class="cs-checkbox"><input type="checkbox" id="s4" checked><label class="cs-checkbox__label" for="s4">Critical thinking</label></div>
-                <hr class="cs-hr" style="margin:14px 0">
-                <h2 class="group-title">Languages</h2>
-                <div class="skill"><span>Portuguese — native</span><div class="cs-progress-bar"><div class="bars" style="width:100%"></div></div></div>
-                <div class="skill"><span>English — C1</span><div class="cs-progress-bar"><div class="bars" style="width:85%"></div></div></div>
-                <div class="skill"><span>German — A2</span><div class="cs-progress-bar"><div class="bars" style="width:30%"></div></div></div>
+                <div data-category="soft">
+                  <h2 class="group-title">Soft skills</h2>
+                  <div class="cs-checkbox"><input type="checkbox" id="s1" checked><label class="cs-checkbox__label" for="s1">Problem-solving</label></div>
+                  <div class="cs-checkbox"><input type="checkbox" id="s2" checked><label class="cs-checkbox__label" for="s2">Adaptability</label></div>
+                  <div class="cs-checkbox"><input type="checkbox" id="s3" checked><label class="cs-checkbox__label" for="s3">Teamwork</label></div>
+                  <div class="cs-checkbox"><input type="checkbox" id="s4" checked><label class="cs-checkbox__label" for="s4">Critical thinking</label></div>
+                  <hr class="cs-hr" style="margin:14px 0">
+                </div>
+                <div data-category="languages">
+                  <h2 class="group-title">Languages</h2>
+                  <div class="skill"><span>Portuguese — native</span><div class="cs-progress-bar"><div class="bars" style="width:100%"></div></div></div>
+                  <div class="skill"><span>English — C1</span><div class="cs-progress-bar"><div class="bars" style="width:85%"></div></div></div>
+                  <div class="skill"><span>German — A2</span><div class="cs-progress-bar"><div class="bars" style="width:30%"></div></div></div>
+                </div>
               </div>
             </div>
           </div>
