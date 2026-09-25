@@ -287,6 +287,8 @@
         </div>
       </div>`;
     document.body.appendChild(el);
+    // no browser right-click menu over the game (links on the MacBook keep theirs)
+    el.addEventListener('contextmenu', e => { if (!e.target.closest('a[href]')) e.preventDefault(); });
 
     const hud = {
       read: $('#h-read', el), chat: $('#h-chat', el), use: $('#h-use', el), center: $('#h-center', el),
