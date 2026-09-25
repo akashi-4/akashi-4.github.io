@@ -1,0 +1,313 @@
+{
+  "note": "Extracted from the user's own CS 1.6 install (cs_dust.wad, cs_office.bsp/.wad, halflife.wad). Unused office textures are in _office_all/ (not published).",
+  "textures": {
+    "wall": {
+      "file": "cs_dust/-0cssandwall.png",
+      "w": 128,
+      "h": 240
+    },
+    "trim": {
+      "file": "cs_dust/sandtrim.png",
+      "w": 96,
+      "h": 32
+    },
+    "sand": {
+      "file": "cs_dust/-0sand.png",
+      "w": 128,
+      "h": 128
+    },
+    "concrete": {
+      "file": "cs_dust/sandccrete.png",
+      "w": 256,
+      "h": 192
+    },
+    "crateSide": {
+      "file": "cs_dust/sandcrtlrgsd.png",
+      "w": 128,
+      "h": 128
+    },
+    "crateTop": {
+      "file": "cs_dust/sandcrtlrgtp.png",
+      "w": 128,
+      "h": 128
+    },
+    "smallSide": {
+      "file": "cs_dust/sandcrtsmsd.png",
+      "w": 64,
+      "h": 64
+    },
+    "smallTop": {
+      "file": "cs_dust/sandcrtsmtp.png",
+      "w": 64,
+      "h": 64
+    }
+  },
+  "hands": {
+    "source": "cstrike/models: v_flashbang.mdl (idle), v_c4.mdl (idle1, pressbutton frame 20); mirrored like cl_righthand 1",
+    "mouse": "hands/mouse_hand.json",
+    "laptop": "hands/laptop_hands.json",
+    "spin": "hands/spin_hand.json",
+    "mouseGrip": {
+      "pos": [
+        0.1075,
+        -0.0545,
+        -0.2279
+      ],
+      "up": [
+        -0.203,
+        0.932,
+        0.301
+      ],
+      "face": [
+        0.345,
+        -0.22,
+        0.912
+      ]
+    },
+    "laptopGrip": {
+      "pos": [
+        0.077,
+        -0.0682,
+        -0.247
+      ],
+      "x": [
+        0.633,
+        0.473,
+        -0.613
+      ],
+      "y": [
+        -0.145,
+        0.85,
+        0.507
+      ],
+      "z": [
+        0.761,
+        -0.232,
+        0.606
+      ]
+    },
+    "spinTip": [
+      0.0789,
+      -0.0185,
+      -0.324
+    ]
+  },
+  "laptopModel": "viewmodels/laptop.glb",
+  "office": {
+    "carpet": {
+      "file": "cs_office/graycarpet.png",
+      "w": 128,
+      "h": 192
+    },
+    "wall": {
+      "file": "cs_office/hallway_3.png",
+      "w": 160,
+      "h": 128
+    },
+    "wallPillar": {
+      "file": "cs_office/hallway_10.png",
+      "w": 160,
+      "h": 128
+    },
+    "bossWall": {
+      "file": "cs_office/fifties_wall14u.png",
+      "w": 128,
+      "h": 160
+    },
+    "ceiling": {
+      "file": "cs_office/ceil01_a1.png",
+      "w": 64,
+      "h": 80
+    },
+    "light": {
+      "file": "cs_office/+0~fifts_lght01.png",
+      "w": 64,
+      "h": 80
+    },
+    "desk": {
+      "file": "cs_office/wood_1.png",
+      "w": 256,
+      "h": 128
+    },
+    "monitor": {
+      "file": "cs_office/sphinx_mon_2.png",
+      "w": 96,
+      "h": 96
+    },
+    "monitorAlt": {
+      "file": "cs_office/CpMonitor.png",
+      "w": 48,
+      "h": 48
+    },
+    "pcFront": {
+      "file": "cs_office/cpucase.png",
+      "w": 64,
+      "h": 128
+    },
+    "beige": {
+      "file": "cs_office/edge.png",
+      "w": 96,
+      "h": 96
+    },
+    "keyboard": {
+      "file": "cs_office/keyboard_white.png",
+      "w": 64,
+      "h": 32
+    },
+    "couch": {
+      "file": "cs_office/couch_4.png",
+      "w": 48,
+      "h": 48
+    },
+    "couchTop": {
+      "file": "cs_office/couch_1.png",
+      "w": 48,
+      "h": 48
+    },
+    "snow": {
+      "file": "cs_office/sphinx_snow_1.png",
+      "w": 256,
+      "h": 192
+    },
+    "serverWall": {
+      "file": "cs_office/Concrete01.png",
+      "w": 256,
+      "h": 256
+    },
+    "serverFloor": {
+      "file": "cs_office/lab1_flr7a.png",
+      "w": 128,
+      "h": 128
+    },
+    "rack": {
+      "file": "cs_office/~lab1_comp8b.png",
+      "w": 48,
+      "h": 128
+    },
+    "rackLights": {
+      "file": "cs_office/~lab1_comp3c.png",
+      "w": 64,
+      "h": 32
+    },
+    "serverPanel": {
+      "file": "cs_office/generic114.png",
+      "w": 80,
+      "h": 48
+    },
+    "serverSign": {
+      "file": "cs_office/sign87.png",
+      "w": 96,
+      "h": 48
+    },
+    "vending": {
+      "file": "cs_office/generic105_sp.png",
+      "w": 64,
+      "h": 96
+    },
+    "vendingAlt": {
+      "file": "cs_office/generic89a_sp.png",
+      "w": 64,
+      "h": 96
+    },
+    "whiteboard": {
+      "file": "cs_office/poster15.png",
+      "w": 96,
+      "h": 64
+    },
+    "whiteboardAlt": {
+      "file": "cs_office/poster18.png",
+      "w": 96,
+      "h": 64
+    },
+    "corkboard": {
+      "file": "cs_office/poster14.png",
+      "w": 96,
+      "h": 64
+    },
+    "diploma": {
+      "file": "cs_office/picture5.png",
+      "w": 80,
+      "h": 64
+    },
+    "painting": {
+      "file": "cs_office/painting01.png",
+      "w": 128,
+      "h": 128
+    },
+    "paintingBoss": {
+      "file": "cs_office/painting07.png",
+      "w": 128,
+      "h": 128
+    },
+    "worldMap": {
+      "file": "cs_office/lab1_map1.png",
+      "w": 128,
+      "h": 128
+    },
+    "bossSign": {
+      "file": "cs_office/sign_Prsdnt.png",
+      "w": 96,
+      "h": 32
+    },
+    "companySign": {
+      "file": "cs_office/sign_PrdgyInc.png",
+      "w": 96,
+      "h": 32
+    },
+    "doorWood": {
+      "file": "cs_office/door_2.png",
+      "w": 64,
+      "h": 128
+    },
+    "doorMetal": {
+      "file": "cs_office/c1a1_dr2.png",
+      "w": 48,
+      "h": 96
+    },
+    "lift": {
+      "file": "cs_office/elev2_dr.png",
+      "w": 128,
+      "h": 128
+    },
+    "exit": {
+      "file": "cs_office/exit1.png",
+      "w": 64,
+      "h": 32
+    },
+    "clock": {
+      "file": "cs_office/clock2a.png",
+      "w": 64,
+      "h": 64
+    },
+    "graph": {
+      "file": "cs_office/Graph.png",
+      "w": 128,
+      "h": 128
+    },
+    "chart": {
+      "file": "cs_office/sphinx_overhead.png",
+      "w": 128,
+      "h": 128
+    },
+    "boxSide": {
+      "file": "cs_office/CrdBrdSde1.png",
+      "w": 64,
+      "h": 64
+    },
+    "boxTop": {
+      "file": "cs_office/CrdBrdTop.png",
+      "w": 64,
+      "h": 64
+    },
+    "vent": {
+      "file": "cs_office/ventlab1.png",
+      "w": 64,
+      "h": 128
+    },
+    "spot": {
+      "file": "cs_office/~spotred.png",
+      "w": 16,
+      "h": 16
+    }
+  }
+}

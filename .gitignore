@@ -3,5 +3,12 @@ mockups/
 img/main_image.png
 # CV with phone number: publish a copy without it (same name) and remove this line
 Joao-Furukawa-CV.pdf
-# Textures extracted from a local CS 1.6 install: local use only, never publish
-assets-local/
+# Game assets (CS 1.6 textures and hands, the Blender MacBook): only what the game loads is published.
+# Blender sources, previews, reference dumps and unused textures stay local.
+assets-local/*
+!assets-local/manifest.json
+!assets-local/cs_dust/
+!assets-local/cs_office/
+!assets-local/hands/
+!assets-local/viewmodels/
+assets-local/viewmodels/laptop_old_primitive.glb
