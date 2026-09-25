@@ -1,6 +1,7 @@
 /* The CV as a small Counter-Strike game, loaded on demand from the main menu ("New Game").
-   Maps live in maps/*.js: cs_office_cv (default), where every CV section is a locked workstation
-   your MacBook hacks, and de_dust2_cv (bonus), with the sections as panels on the walls. */
+   Maps live in maps/*.js: cs_office_cv (default), where every CV window is a locked workstation
+   your MacBook hacks, and de_dust2_cv (bonus), with the windows as panels on the walls. The MacBook
+   (E) shows the CV page itself, with every section you haven't got yet encrypted. */
 (() => {
   const THREE_URL = 'https://cdn.jsdelivr.net/npm/three@0.170.0/build/three.module.js';
   const SCRIPT_URL = document.currentScript ? document.currentScript.src : location.href;
@@ -205,6 +206,26 @@
     step() { this.burst({ dur: 0.07, type: 'bandpass', freq: 700 + Math.random() * 400, q: 0.8, gain: 0.25, rate: 0.8 + Math.random() * 0.4 }); },
     land() { this.burst({ dur: 0.1, type: 'lowpass', freq: 500, gain: 0.35 }); },
     use() { this.tone({ dur: 0.06, freq: 520, type: 'square', gain: 0.06 }); this.tone({ dur: 0.08, freq: 780, type: 'square', gain: 0.06, delay: 0.06 }); },
+    radio() { this.burst({ dur: 0.18, type: 'bandpass', freq: 1800, q: 0.7, gain: 0.3 }); this.tone({ dur: 0.08, freq: 1400, type: 'square', gain: 0.04, delay: 0.1 }); },
+    // a recorded sound (decoded AudioBuffer); radio: thin it out like an earpiece
+    play(buf, { radio = false, gain = 1 } = {}) {
+      const c = this.ctx; if (!c || !buf) return null;
+      const src = c.createBufferSource();
+      src.buffer = buf;
+      let node = src;
+      if (radio) {
+        const hp = c.createBiquadFilter(), lp = c.createBiquadFilter();
+        hp.type = 'highpass'; hp.frequency.value = 280;
+        lp.type = 'lowpass'; lp.frequency.value = 4200;
+        node.connect(hp); hp.connect(lp); node = lp;
+      }
+      const g = c.createGain();
+      g.gain.value = gain;
+      node.connect(g); g.connect(c.destination);
+      src.start();
+      return src;
+    },
+    ding() { this.tone({ dur: 1.2, freq: 1318, gain: 0.25 }); this.tone({ dur: 1.6, freq: 1046, gain: 0.25, delay: 0.35 }); },
   };
 
   /* ================================================================= game */
@@ -218,26 +239,24 @@
     el.innerHTML = `
       <div class="hud" id="hud">
         <canvas class="radar" width="300" height="300"></canvas>
-        <div class="top-right"><span class="map-name" id="h-map"></span> · <span id="h-verb">hacked</span> <span id="h-read">0/10</span><br>TAB: files on your MacBook</div>
+        <div class="top-right"><span class="map-name" id="h-map"></span> · <span id="h-verb">hacked</span> <span id="h-read">0/4</span><br>E: open your MacBook</div>
         <div class="cursor" aria-hidden="true"></div>
         <div class="chat" id="h-chat"></div>
         <div class="use-hint" id="h-use" hidden></div>
         <div class="center-msg" id="h-center" hidden></div>
+        <div class="radio-msg" id="h-radio" hidden><b>HQ</b><p></p><span class="skip">E · skip</span></div>
         <div class="money"><span class="delta" id="h-delta">+ $300</span><span>$ <span id="h-money">800</span></span></div>
         <div class="hud-row">
-          <div class="hud-group">
-            <div class="hud-num"><svg viewBox="0 0 10 10"><path d="M3.5 0h3v3.5H10v3H6.5V10h-3V6.5H0v-3h3.5z"/></svg>100</div>
-            <div class="hud-num"><svg viewBox="0 0 10 10"><path d="M5 0l4.5 1.6v3.2C9.5 7.4 7.6 9.2 5 10 2.4 9.2.5 7.4.5 4.8V1.6z"/></svg>100</div>
-          </div>
+          <div class="hud-num battery" id="h-batt-wrap" title="MacBook battery"><svg viewBox="0 0 26 13"><rect x="1" y="1" width="21" height="11" rx="2.5" fill="none" stroke="currentColor" stroke-width="1.6"/><rect id="h-batt-fill" x="3" y="3" width="17" height="7" rx="1"/><rect x="23" y="4" width="2.4" height="5" rx="1"/></svg><span id="h-batt">100</span>%</div>
           <div class="hud-num" id="h-time-wrap"><svg viewBox="0 0 10 10"><path d="M5 0a5 5 0 110 10A5 5 0 015 0zm0 1.4a3.6 3.6 0 100 7.2 3.6 3.6 0 000-7.2zM4.4 2.4h1.2v2.4l1.8 1.1-.6 1-2.4-1.4z"/></svg><span id="h-time">1:55</span></div>
-          <div class="hud-num" title="Objectives"><span id="h-count">0</span><span class="sep">|</span><span id="h-total">10</span><svg viewBox="0 0 12 19"><path d="M0 0v16l4-4 3 6 2.5-1.2-3-6H12z"/></svg></div>
+          <div class="hud-num" title="Objectives"><span id="h-count">0</span><span class="sep">|</span><span id="h-total">4</span><svg viewBox="0 0 20 20"><circle cx="8" cy="8" r="5.6" fill="none" stroke="currentColor" stroke-width="2.6"/><path d="M12.2 12.2l5.8 5.8" fill="none" stroke="currentColor" stroke-width="3.2" stroke-linecap="round"/></svg></div>
         </div>
       </div>
       <div class="game-pause" id="g-pause" hidden>
         <h2 class="title" id="g-title"></h2>
         <nav class="main-menu" aria-label="Game menu">
           <a href="#" data-act="resume">Resume Game</a>
-          <a href="#" data-act="files">MacBook files</a>
+          <a href="#" data-act="cv">MacBook</a>
           <a href="#" data-act="map" id="g-map">Change map</a>
           <a href="#" data-act="contact">Contact</a>
           <a href="#" data-act="motd">Controls</a>
@@ -249,8 +268,22 @@
       <div class="enter-fx" id="g-fx" hidden></div>
       <div class="game-modal" id="g-modal" hidden>
         <div class="mac-frame">
-          <div class="mac-bar" aria-hidden="true"><span id="g-mac-path"></span><span id="g-mac-clock"></span></div>
-          <div class="game-modal-inner" id="g-modal-inner"></div>
+          <div class="mac-bar" aria-hidden="true">
+            <span class="mac-menus"><svg class="apple" viewBox="0 0 14 17"><path d="M11.6 9c0-2 1.6-3 1.7-3-1-1.4-2.4-1.6-2.9-1.6-1.2-.1-2.4.7-3 .7s-1.6-.7-2.6-.7C3.4 4.4 2 5.2 1.3 6.5c-1.6 2.7-.4 6.7 1.1 8.9.7 1.1 1.6 2.3 2.8 2.2 1.1 0 1.5-.7 2.9-.7 1.3 0 1.7.7 2.9.7 1.2 0 2-1.1 2.7-2.2.8-1.2 1.2-2.4 1.2-2.5 0 0-2.3-.9-2.3-3.9zM9.4 3c.6-.8 1-1.8.9-2.9-.9 0-2 .6-2.6 1.4-.6.7-1.1 1.7-.9 2.7 1 .1 2-.5 2.6-1.2z"/></svg><b id="g-mac-app">Finder</b><span>File</span><span>Edit</span><span>View</span><span>Go</span><span>Window</span><span>Help</span></span>
+            <span class="mac-status"><svg viewBox="0 0 20 14"><path d="M10 13.5l2.6-3.1a4 4 0 00-5.2 0zM4.8 7.3l1.6 1.9a5.6 5.6 0 017.2 0l1.6-1.9a8 8 0 00-10.4 0zM1.5 3.4l1.6 1.9a10.8 10.8 0 0113.8 0l1.6-1.9a13.3 13.3 0 00-17 0z"/></svg><svg viewBox="0 0 26 13"><rect x=".5" y=".5" width="22" height="12" rx="3" fill="none" stroke="currentColor" opacity=".6"/><rect x="2.5" y="2.5" width="15" height="8" rx="1.5"/><path d="M24 4.5v4a2 2 0 000-4z" opacity=".6"/></svg><span id="g-mac-clock"></span></span>
+          </div>
+          <div class="mac-desk">
+            <ul class="mac-icons" aria-hidden="true">
+              <li><i class="ic-hd"></i>Macintosh HD</li>
+              <li><i class="ic-folder"></i>Projects</li>
+              <li><i class="ic-pdf"></i>Joao-Furukawa-CV.pdf</li>
+              <li><i class="ic-shot"></i>Screenshot 2026-09-25 at 23.41.08</li>
+            </ul>
+            <div class="game-modal-inner" id="g-modal-inner"></div>
+            <div class="mac-dock" aria-hidden="true">
+              <i class="d-finder on"></i><i class="d-compass"></i><i class="d-mail"></i><i class="d-notes"></i><i class="d-term on"></i><i class="d-code"></i><i class="d-gear"></i><b></b><i class="d-trash"></i>
+            </div>
+          </div>
         </div>
       </div>`;
     document.body.appendChild(el);
@@ -260,11 +293,13 @@
       money: $('#h-money', el), delta: $('#h-delta', el), time: $('#h-time', el),
       count: $('#h-count', el), total: $('#h-total', el), map: $('#h-map', el), verb: $('#h-verb', el),
       cursor: $('.cursor', el), radar: $('.radar', el), root: $('#hud', el),
+      batt: $('#h-batt', el), battFill: $('#h-batt-fill', el), battWrap: $('#h-batt-wrap', el),
+      timeWrap: $('#h-time-wrap', el), radio: $('#h-radio', el), radioText: $('#h-radio p', el), radioFrom: $('#h-radio b', el),
     };
     const pauseEl = $('#g-pause', el);
     const modalEl = $('#g-modal', el);
     const modalInner = $('#g-modal-inner', el);
-    const macPath = $('#g-mac-path', el);
+    const macApp = $('#g-mac-app', el);
     const macClock = $('#g-mac-clock', el);
     const fxEl = $('#g-fx', el);
 
@@ -384,8 +419,9 @@
     }
 
     /* ------------------------------------------------ files & progress */
-    // Every CV section is a file you can pull onto the MacBook. `key` is what progress stores,
-    // so it carries over between maps (dust's single Skills panel grants all six skill files).
+    // Every window of the CV page is a file you pull onto the MacBook. `key` is what progress
+    // stores, so it carries over between maps; `win` is the window's id on the page.
+    // SKILLS are only the office's cubicle nameplates.
     const SKILLS = [
       { id: 'frontend', heading: 'Frontend', host: 'frontend-dev-01' },
       { id: 'backend', heading: 'Backend', host: 'backend-dev-02' },
@@ -395,12 +431,11 @@
       { id: 'soft', heading: 'Soft skills', host: 'people-ops-06' },
     ];
     const FILES = [
-      { key: 'about', section: 'about', heading: 'About', file: 'about.txt' },
-      { key: 'career', section: 'career', heading: 'Career', file: 'career.log' },
-      ...SKILLS.map(s => ({ key: 'skills:' + s.id, section: 'skills', category: s.id, heading: s.heading, file: `skills/${s.id}.dat` })),
-      { key: 'work', section: 'work', heading: 'Work @ TUU', file: 'projects/work.md' },
-      { key: 'personal', section: 'personal', heading: 'Personal & University', file: 'projects/personal.md' },
-      { key: 'contact', section: 'contact', heading: 'Contact', file: 'contact.vcf' },
+      { key: 'career', section: 'career', heading: 'Career', file: 'career.log', win: 'career' },
+      { key: 'work', section: 'work', heading: 'Work @ TUU', file: 'projects/work.md', win: 'projects' },
+      { key: 'skills', section: 'skills', heading: 'Skills', file: 'skills.dat', win: 'skills' },
+      { key: 'personal', section: 'personal', heading: 'Personal & University', file: 'projects/personal.md', win: 'personal' },
+      { key: 'contact', section: 'contact', heading: 'Contact', file: 'contact.vcf', win: 'contact' },
     ];
     const fileFor = key => FILES.find(f => f.key === key);
     const read = new Set();
@@ -464,6 +499,7 @@
         g.fillStyle = '#000'; g.font = '19px Tahoma, Arial, sans-serif';
         g.fillText('This computer is locked.', bx + 90, by + 70);
         g.font = 'bold 24px Tahoma, Arial, sans-serif'; g.fillText(d.host, bx + 90, by + 104);
+        if (d.owner) { g.font = '17px Tahoma, Arial, sans-serif'; g.fillText(`${d.owner} is logged on.`, bx + 90, by + 134); }
         g.font = '19px Tahoma, Arial, sans-serif'; g.fillText('Password:', bx + 26, by + bh - 50);
         g.fillStyle = '#fff'; g.fillRect(bx + 130, by + bh - 66, bw - 156, 32);
         g.fillStyle = '#000'; g.font = '22px Tahoma, Arial, sans-serif'; g.fillText('●●●●●●●', bx + 138, by + bh - 50);
@@ -544,6 +580,12 @@
       const s = map.spawn;
       P.pos.set(s.x, s.y, s.z); P.vel.set(0, 0, 0); P.yaw = s.yaw; P.pitch = 0;
       anim = null; lapInsp = null; hackDef = null; screenKey = '';
+      if (stopBriefing()) briefed = true;
+      if (map.briefing) { preload(map.briefing.voice); preload(map.briefing.lift); }
+      if (map.openLift && briefed) map.openLift(true);
+      if (!map.briefing) briefed = true;
+      const last = map.terminals.find(d => d.finale);
+      if (briefed && !(last && isDone(last))) missionOn = true;
       if (map.unlock && doneCount() === objectives().length) map.unlock(true);
       hud.map.textContent = map.name;
       hud.verb.textContent = map.verb === 'hack' ? 'hacked' : 'read';
@@ -690,7 +732,8 @@
           g.fillText(hack ? (open ? def.heading + ' · yours' : 'locked · ' + def.heading) : def.title, 24, 156);
           g.fillStyle = '#dedfd6'; g.fillText(!hack ? '[E]  connect' : open ? '[E]  open ' + def.file : '[E]  hack', 24, 260);
         } else {
-          const lines = hack && fresh
+          const lines = def.self ? ['$ open ~/Desktop/CV', 'Mounting CV.dmg...', 'Opened.']
+            : hack && fresh
             ? [`$ ssh recruiter@${def.host}`, 'Password: ********', 'cracking hash...', 'ACCESS GRANTED', `$ scp ${def.file} ~/`, 'Download complete.']
             : hack ? [`$ ssh recruiter@${def.host}`, 'Key accepted.', `$ open ~/${def.file}`]
             : [`$ ssh ${def.id}.panel`, 'Connecting to', `  ${def.heading}...`, 'Handshake OK', 'Connected.'];
@@ -698,7 +741,7 @@
           const lh = lines.length > 5 ? 40 : 44;
           g.font = '24px ArialPixel, monospace';
           lines.slice(0, shown).forEach((t, i) => {
-            const ok = /GRANTED|complete|Connected|accepted/.test(t);
+            const ok = /GRANTED|complete|Connected|accepted|Opened/.test(t);
             g.fillStyle = ok ? '#7fe07f' : (t.startsWith('$') ? '#c4b550' : '#dedfd6');
             g.fillText(t, 20, 70 + i * lh);
           });
@@ -926,17 +969,20 @@
     const reducedMotion = matchMedia('(prefers-reduced-motion: reduce)').matches;
     let anim = null;             // { type: 'enter' | 'exit' | 'inspect', t, dur, def, fresh }
     function startAnim(type, def) {
-      const durs = { enter: lapReady ? lapClips.enter.dur : 1.15, exit: 0.6, inspect: 4.2 };
+      const durs = { enter: (lapReady ? lapClips.enter.dur : 1.15) / 1.35, exit: 0.6, inspect: 4.2 };
       anim = { type, t: 0, dur: reducedMotion ? Math.min(durs[type], 0.35) : durs[type], def };
     }
+    // E: jack into what you're aiming at, or with nothing there just open the MacBook (def null)
+    const SELF = { id: '_cv', self: true };
     function usePanel(def) {
-      if ((anim && anim.type === 'enter') || lapInsp || def.locked) return;
+      if ((anim && anim.type === 'enter') || lapInsp) return;
+      if (def && def.locked) { centerMsg(`Access denied · hack all ${objectives().length} workstations first`, 2); return; }
       state = 'anim';
       hud.use.hidden = true;
       fxEl.hidden = false; fxEl.style.opacity = 0;
       Sound.use();
       startAnim('enter', def);
-      anim.fresh = map.verb === 'hack' && !isDone(def);
+      anim.fresh = !!def && map.verb === 'hack' && !isDone(def);
       if (anim.fresh) hackDef = def;
     }
     function inspect() {
@@ -951,7 +997,11 @@
 
     /* ------------------------------------------------------------ HUD */
     let money = 800;
-    let roundLeft = 115;
+    const MISSION = 300;         // seconds on the clock once the lift doors open
+    let roundLeft = MISSION;
+    let missionOn = false;       // the clock runs (after the briefing, until the last piece)
+    let battery = 100;           // drains slowly, and every hack costs a little
+    function missionOver() { missionOn = false; }
     function chat(html) {
       const p = document.createElement('p');
       p.innerHTML = html;
@@ -996,24 +1046,6 @@
     }
 
     /* ------------------------------------------------ windows / modal */
-    let aboutWin = null;
-    function buildAbout() {
-      const bio = $('.menu-screen .bio')?.textContent.trim() ?? '';
-      const w = document.createElement('div');
-      w.className = 'cs-dialog window';
-      w.style.maxWidth = '520px';
-      w.innerHTML = `
-        <div class="heading"><div class="wrapper"><div class="icon"></div><div class="text">About</div></div>
-          <a class="cs-btn close" href="#top" aria-label="Close"></a></div>
-        <div class="content">
-          <h2>João Tirloni Furukawa</h2>
-          <p class="accent">Junior Software Developer · Coimbra, Portugal</p>
-          <p style="margin-top:10px"></p>
-        </div>
-        <div class="footer-btns"><a class="cs-btn" href="Joao-Furukawa-CV.pdf" download>CV (PDF)</a> <a class="cs-btn" href="#top">OK</a></div>`;
-      $('.content p:last-child', w).textContent = bio;
-      return w;
-    }
     function buildMotd() {
       const hack = map.verb === 'hack';
       const w = document.createElement('div');
@@ -1031,77 +1063,165 @@
             <dt>Space</dt><dd>Jump</dd>
             <dt>C</dt><dd>Crouch (crouch-jump onto crates)</dd>
             <dt>Shift</dt><dd>Walk quietly</dd>
-            <dt>E / click</dt><dd>${hack ? 'Hack a workstation' : 'Connect to a panel'}</dd>
+            <dt>E</dt><dd>Open your MacBook · aimed at a ${hack ? 'workstation: hack it' : 'panel: connect to it'}</dd>
+            <dt>Tab</dt><dd>Peek at the CV on your MacBook</dd>
             <dt>F</dt><dd>Inspect (hold to keep it spinning)</dd>
-            <dt>Tab</dt><dd>Files on your MacBook</dd>
             <dt>Esc</dt><dd>Menu (change map, contact)</dd>
           </dl>
         </div>
         <div class="footer-btns"><a class="cs-btn" href="#top">OK</a></div>`;
       return w;
     }
-    // Tab: what you've pulled onto the MacBook so far. Click a file to read it again.
-    function buildFiles() {
-      const have = FILES.filter(f => read.has(f.key)).length;
-      const w = document.createElement('div');
-      w.className = 'cs-dialog window files';
-      w.style.maxWidth = '620px';
-      const rows = FILES.map(f => {
-        const got = read.has(f.key);
-        const where = map.terminals.find(d => d.keys.includes(f.key));
-        const hint = !where ? 'not on this map' : where.locked ? 'server room' : map.verb === 'hack' ? 'locked · ' + where.host : where.heading;
-        return got
-          ? `<li><button type="button" class="file-row" data-file="${f.key}"><span class="name">${f.file}</span><span class="what">${f.heading}</span></button></li>`
-          : `<li><div class="file-row missing"><span class="name">???</span><span class="what">${hint}</span></div></li>`;
-      }).join('');
-      w.innerHTML = `
-        <div class="heading"><div class="wrapper"><div class="icon"></div><div class="text">Files — recruiter's MacBook</div></div>
-          <a class="cs-btn close" href="#top" aria-label="Close"></a></div>
-        <div class="content">
-          <p class="files-sum"><span class="accent">${have}/${FILES.length}</span> files downloaded · ${map.name}: ${doneCount()}/${objectives().length} ${map.verb === 'hack' ? 'hacked' : 'read'}</p>
-          <ul class="file-list">${rows}</ul>
-        </div>
-        <div class="footer-btns"><a class="cs-btn" href="#top">OK</a></div>`;
+
+    // The CV on the MacBook is the page's own desktop of windows, moved in here while it's open.
+    // A section you haven't got yet is swapped for a redacted copy: same window, title and
+    // borders, every word turned into ???.
+    const cvDesktop = $('#desktop');
+    const winOf = f => document.getElementById(f.win);
+    const textNodes = root => {
+      const out = [], walk = document.createTreeWalker(root, NodeFilter.SHOW_TEXT);
+      while (walk.nextNode()) {
+        const n = walk.currentNode;
+        if (n.nodeValue.trim() && !n.parentElement.closest('.heading, .group-title')) out.push(n);
+      }
+      return out;
+    };
+    function redacted(f) {
+      const w = winOf(f).cloneNode(true);
+      w.classList.add('redacted');
+      w.classList.remove('flash');
+      for (const n of [w, ...w.querySelectorAll('[id]')]) n.removeAttribute('id');
+      for (const n of w.querySelectorAll('[for]')) n.removeAttribute('for');
+      for (const n of w.querySelectorAll('input[name]')) n.name = 'redacted-' + n.name;
+      for (const n of w.querySelectorAll('input, select, button')) { n.disabled = true; n.tabIndex = -1; }
+      for (const a of w.querySelectorAll('.content a, .footer-btns a')) a.removeAttribute('href');
+      for (const t of textNodes(w)) {
+        const words = Math.max(1, Math.min(24, Math.round(t.nodeValue.trim().length / 7)));
+        t.nodeValue = Array(words).fill('???').join(' ');
+      }
+      const where = map.terminals.find(d => d.keys.includes(f.key));
+      const note = document.createElement('p');
+      note.className = 'redact-note';
+      note.textContent = !where ? 'ENCRYPTED · not on this map'
+        : map.verb === 'hack' ? `ENCRYPTED · hack ${where.host} to decrypt` : `ENCRYPTED · connect to the ${where.heading} panel`;
+      const content = $('.content', w);
+      if (content) content.prepend(note);
       return w;
     }
-    const sectionWin = {
-      about: () => aboutWin || (aboutWin = buildAbout()),
-      career: () => $('#career'),
-      work: () => $('#projects'),
-      personal: () => $('#personal'),
-      skills: () => $('#skills'),
-      contact: () => $('#contact'),
-    };
-    // A skill desk only holds its own category: hide the other blocks of the Skills window.
-    function focusSkills(win, f) {
-      const cat = f && f.category;
-      win.classList.toggle('one-category', !!cat);
-      for (const b of win.querySelectorAll('[data-category]')) b.classList.toggle('cat-hidden', !!cat && b.dataset.category !== cat);
-      for (const i of win.querySelectorAll('.inset')) i.classList.toggle('cat-hidden', !!cat && !i.querySelector(`[data-category="${cat}"]`));
-      const t = $('.heading .text', win);
-      if (t) {
-        if (t.dataset.orig == null) t.dataset.orig = t.textContent;
-        t.textContent = cat ? `Skills — ${f.heading}` : t.dataset.orig;
+    // A freshly decrypted window: its text scrambles and settles into the real words.
+    let decrypting = null;
+    function decrypt(win) {
+      if (reducedMotion) return;
+      const GL = '!<>-_\\/[]{}=+*^?#%01';
+      const texts = textNodes(win).map(n => [n, n.nodeValue]);
+      const t0 = performance.now(), dur = 1400;
+      const step = now => {
+        const k = Math.min(1, Math.max(0, (now - t0) / dur));
+        for (const [n, orig] of texts) {
+          const cut = Math.floor(orig.length * k);
+          let out = orig.slice(0, cut);
+          for (let i = cut; i < orig.length; i++) out += /\s/.test(orig[i]) ? orig[i] : GL[Math.random() * GL.length | 0];
+          n.nodeValue = out;
+        }
+        if (k < 1) decrypting.raf = requestAnimationFrame(step);
+        else stopDecrypt();
+      };
+      decrypting = { texts, raf: requestAnimationFrame(step) };
+    }
+    function stopDecrypt() {
+      if (!decrypting) return;
+      cancelAnimationFrame(decrypting.raf);
+      for (const [n, orig] of decrypting.texts) n.nodeValue = orig;
+      decrypting = null;
+    }
+    // opts.reveal: the file just decrypted (scrolled to, flashed, unscrambled); opts.focus: just
+    // scroll to it; opts.congrats: the bonus popup
+    function openCV(opts = {}) {
+      const swaps = [];
+      for (const f of FILES) {
+        if (read.has(f.key)) continue;
+        const real = winOf(f), fake = redacted(f);
+        real.replaceWith(fake);
+        swaps.push([fake, real]);
       }
+      openWindow(cvDesktop, { ...opts, mac: true, kind: 'cv', swaps, app: 'Preview' });
+      const f = opts.reveal || opts.focus;
+      if (f) {
+        const w = winOf(f);
+        let y = 0;   // offsets, not the bounding box: the CRT switch-on is still scaling the desktop
+        for (let n = w; n && n !== modalInner; n = n.offsetParent) y += n.offsetTop;
+        modalInner.scrollTop = y - 16;
+        const cls = opts.reveal ? 'hacked' : 'flash';   // just decrypted: blink three times
+        w.classList.remove('flash', 'hacked'); void w.offsetWidth; w.classList.add(cls);
+        if (opts.reveal) w.addEventListener('animationend', () => w.classList.remove('hacked'), { once: true });
+      }
+      if (opts.reveal) decrypt(winOf(opts.reveal));
+      if (opts.congrats) {
+        const c = document.createElement('div');
+        c.className = 'cs-dialog mac-congrats';
+        c.innerHTML = `
+          <div class="heading"><div class="wrapper"><div class="icon"></div><div class="text">srv-core-01</div></div></div>
+          <div class="content">
+            <h2>Congratulations, you decrypted the CV!</h2>
+            <p>Every section is yours now. Thanks for playing. The quickest way to reach me is under Contact.</p>
+          </div>
+          <div class="footer-btns"><button type="button" class="cs-btn" data-act="congrats-ok">OK</button></div>`;
+        $('.mac-desk', el).appendChild(c);
+        modal.extra = c;
+        $('button', c).focus({ preventScroll: true });
+      }
+    }
+    // The hack itself: a terminal on the MacBook that ends in the decrypted CV (about 3 s)
+    function openHack(def, laptop) {
+      const w = document.createElement('div');
+      w.className = 'mac-term';
+      w.innerHTML = '<div class="mac-term-bar"><i></i><i></i><i></i><span></span></div><div class="mac-term-body"></div><div class="mac-term-prog"><div></div></div>';
+      $('span', w).textContent = `recruiter — ssh ${def.host}`;
+      const body = $('.mac-term-body', w), bar = $('.mac-term-prog div', w);
+      const fast = reducedMotion ? 0.3 : 1;
+      const lines = [
+        [0, `$ ssh recruiter@${def.host}`],
+        [250, 'Loading...'],
+        [650, 'Bypassing login... OK'],
+        [1050, 'Accessing documents...'],
+        [1500, `Downloading ${def.file}...`],
+        [2000, def.finale ? 'Decrypting the last piece...' : 'Decrypting...'],
+        [2650, 'Done.'],
+      ];
+      const timers = lines.map(([ms, text]) => setTimeout(() => {
+        const p = document.createElement('p');
+        p.textContent = text;
+        if (text.startsWith('$')) p.className = 'cmd';
+        else if (/OK$|Done/.test(text)) p.className = 'ok';
+        body.appendChild(p);
+      }, ms * fast));
+      bar.style.transitionDuration = 2.6 * fast + 's';
+      timers.push(setTimeout(() => { bar.style.width = '100%'; }, 30));
+      timers.push(setTimeout(() => {
+        if (!modal || modal.el !== w || modal.closing) return;
+        restoreModal();
+        complete(def);
+        openCV({ laptop, quiet: true, reveal: fileFor(def.keys[0]), congrats: !!def.finale });
+      }, 2950 * fast));
+      openWindow(w, { laptop, mac: true, kind: 'hack', timers, app: 'Terminal' });
     }
 
     let state = 'off';        // off | playing | paused | modal
-    let modal = null;         // { el, parent, next, viaLaptop, mac, back, kind, file }
+    let modal = null;         // { el, parent, next, viaLaptop, kind, swaps, timers, extra }
     let motdShown = false;
 
     // opts.laptop: you jacked in (the exit animation plays on close); opts.mac: shown on the MacBook
-    // screen; opts.back: 'files' returns to the file browser on close; opts.file: which CV file it is
+    // screen; opts.quiet: no CRT switch-on (it's already on the MacBook)
     function openWindow(win, opts = {}) {
       const mac = !!(opts.laptop || opts.mac);
-      modal = { el: win, parent: win.parentNode, next: win.nextSibling, viaLaptop: !!opts.laptop, mac, back: opts.back, kind: opts.kind, file: opts.file };
-      if (mac) {
+      modal = { el: win, parent: win.parentNode, next: win.nextSibling, viaLaptop: !!opts.laptop, kind: opts.kind, swaps: opts.swaps, timers: opts.timers, fromPause: state === 'paused' };
+      if (mac && !opts.quiet) {
         win.classList.add('crt-in');
         win.addEventListener('animationend', () => win.classList.remove('crt-in'), { once: true });
       }
-      if (opts.file && opts.file.section === 'skills') focusSkills(win, opts.file);
       modalEl.classList.toggle('mac', mac);
-      macPath.textContent = opts.kind === 'files' ? 'recruiter@MacBook: ~/' : opts.file ? `recruiter@MacBook: ~/${opts.file.file}` : '';
-      macClock.textContent = hhmm();
+      macApp.textContent = opts.app || 'Finder';
+      macClock.textContent = new Date().toLocaleDateString('en-GB', { weekday: 'short', day: 'numeric', month: 'short' }).replace(',', '') + '  ' + hhmm();
       modalInner.appendChild(win);
       modalInner.scrollTop = 0;
       modalEl.hidden = false;
@@ -1109,40 +1229,20 @@
       hud.root.hidden = true;
       state = 'modal';
       if (document.pointerLockElement) document.exitPointerLock();
-      const first = win.querySelector('button.file-row, input, a, button');
+      const first = win.querySelector('input:not([disabled]), a[href], button:not([disabled])');
       if (first) first.focus({ preventScroll: true });
     }
-    function openPanel(def, viaLaptop = false) {
-      if (!viaLaptop) Sound.use();
-      const f = def.section === 'skills' && def.keys.length === 1 ? fileFor(def.keys[0]) : fileFor(def.section);
-      openWindow(sectionWin[def.section](), { laptop: viaLaptop, file: f });
-      if (hackDef === def) hackDef = null;
-      if (isDone(def)) return;
-      for (const k of def.keys) read.add(k);
-      updateProgress();
-      chat(`<span class="g">* Objective:</span> ${map.verb === 'hack' ? 'hacked ' + def.host : 'read ' + def.heading}`);
-      addMoney(300);
-      const n = doneCount(), tot = objectives().length;
-      if (def.finale) setTimeout(() => centerMsg('Counter-Terrorists Win', 4), 400);
-      else if (n === tot) {
-        if (map.unlock) {
-          map.unlock();
-          setTimeout(() => { centerMsg('Server room unlocked', 4); chat('<span class="ct">Radio:</span> The server room is open. Get the contact details out.'); }, 400);
-        } else setTimeout(() => centerMsg('Counter-Terrorists Win', 4), 400);
-      }
-    }
-    function openFiles() {
-      Sound.use();
-      openWindow(buildFiles(), { mac: true, kind: 'files' });
-    }
-    function openFile(f, back = 'files') {
-      openWindow(sectionWin[f.section](), { mac: true, file: f, back });
-    }
+    // Put everything back on the page (the real windows in place of the redacted copies)
     function restoreModal() {
-      const win = modal.el;
-      if (modal.file && modal.file.section === 'skills') focusSkills(win, null);
-      if (modal.parent) modal.parent.insertBefore(win, modal.next);
-      else win.remove();
+      const m = modal;
+      for (const t of m.timers || []) clearTimeout(t);
+      if (m.kind === 'hack') hackDef = null;
+      stopDecrypt();
+      if (m.extra) m.extra.remove();
+      for (const [fake, real] of m.swaps || []) fake.replaceWith(real);
+      m.el.classList.remove('crt-in', 'crt-out');
+      if (m.parent) m.parent.insertBefore(m.el, m.next);
+      else m.el.remove();
       modal = null;
       modalEl.hidden = true;
       modalEl.classList.remove('mac');
@@ -1150,28 +1250,27 @@
     }
     function closeModal(relock) {
       if (!modal || modal.closing) return;
-      if (modal.back === 'files') { restoreModal(); openFiles(); return; }
       if (relock) lock();   // request it now, while we still have the click's user gesture
+      // Esc can't grab the mouse again (browsers don't count it as a gesture): back to the menu
+      // if that's where the window came from, otherwise wait for a click to carry on playing
+      const back = modal.fromPause ? showPause : waitForClick;
       if (!modal.viaLaptop) {
         restoreModal();
-        if (!relock) showPause();
+        if (!relock) back();
         return;
       }
       // leaving the computer: the window collapses like a CRT, then the laptop drops back down
       modal.closing = true;
-      const win = modal.el;
-      win.classList.add('crt-out');
+      modal.el.classList.add('crt-out');
       setTimeout(() => {
-        win.classList.remove('crt-out');
         restoreModal();
-        if (!relock) showPause();
+        if (!relock) back();
         startAnim('exit');
       }, reducedMotion ? 10 : 220);
     }
     modalEl.addEventListener('click', e => {
       if (e.target === modalEl) { closeModal(true); return; }
-      const row = e.target.closest('button[data-file]');
-      if (row) { Sound.use(); restoreModal(); openFile(fileFor(row.dataset.file)); return; }
+      if (e.target.closest('[data-act="congrats-ok"]')) { modal.extra.remove(); modal.extra = null; return; }
       const a = e.target.closest('a');
       if (!a) return;
       const href = a.getAttribute('href') || '';
@@ -1181,20 +1280,186 @@
       }
       else if (/^https?:/.test(href)) { e.preventDefault(); open(href, '_blank', 'noopener'); }
     });
-    // arrow keys move between files in the browser
-    modalEl.addEventListener('keydown', e => {
-      if (!modal || modal.kind !== 'files' || !/^Arrow(Up|Down)$/.test(e.key)) return;
-      const rows = [...modalEl.querySelectorAll('button.file-row')];
-      if (!rows.length) return;
-      e.preventDefault();
-      const i = rows.indexOf(document.activeElement);
-      rows[(i + (e.key === 'ArrowDown' ? 1 : -1) + rows.length) % rows.length].focus();
-    });
+
+    // After the enter animation. def null: you just opened the MacBook.
+    function openPanel(def, viaLaptop = false) {
+      if (!def) { openCV({ laptop: viaLaptop }); return; }
+      const f = fileFor(def.keys[0]);
+      if (isDone(def)) { if (hackDef === def) hackDef = null; openCV({ laptop: viaLaptop, focus: f, congrats: !!def.finale }); return; }
+      if (map.verb === 'hack') { openHack(def, viaLaptop); return; }
+      complete(def);
+      openCV({ laptop: viaLaptop, reveal: f });
+    }
+    // A workstation hacked (or a panel read): its files are yours
+    function complete(def) {
+      if (hackDef === def) hackDef = null;
+      if (isDone(def)) return;
+      for (const k of def.keys) read.add(k);
+      updateProgress();
+      if (map.verb === 'hack') battery = Math.max(3, battery - 6);
+      if (def.finale) missionOver();
+      chat(`<span class="g">* Objective:</span> ${map.verb === 'hack' ? 'hacked ' + def.host : 'read ' + def.heading}`);
+      addMoney(300);
+      const n = doneCount(), tot = objectives().length;
+      if (def.finale) setTimeout(() => centerMsg('Counter-Terrorists Win', 4), 400);
+      else if (n === tot) {
+        if (map.unlock) {
+          map.unlock();
+          setTimeout(() => { centerMsg('Server room unlocked', 4); chat('<span class="ct">Radio:</span> The server room is open. There is a bonus on its console.'); }, 400);
+        } else { missionOver(); setTimeout(() => centerMsg('Counter-Terrorists Win', 4), 400); }
+      }
+    }
+
+    /* ------------------------------------------------------- briefing */
+    // On the radio in the lift. With a recorded voice the subtitles follow it (each line snaps to
+    // a pause in the recording); without one the browser's own voice reads them. The lift arrives
+    // on line map.briefing.liftAt and the doors open as its ding ends. E skips it.
+    let brief = null;            // { B, i, text, shown, rate, starts, t0, src, timer, arrived }
+    let briefed = false;
+    const speech = 'speechSynthesis' in window ? speechSynthesis : null;
+    if (speech) speech.getVoices();   // Chrome loads the voice list lazily
+    const audioCache = {};
+    const preload = url => !url || !Sound.ctx ? Promise.resolve(null) : audioCache[url] || (audioCache[url] =
+      fetch(new URL(url, SCRIPT_URL)).then(r => r.ok ? r.arrayBuffer() : Promise.reject(r.status))
+        .then(b => Sound.ctx.decodeAudioData(b)).catch(() => null));
+    const withTimeout = (p, ms = 4000) => Promise.race([p, wait(ms).then(() => null)]);
+    function pickVoice() {
+      if (!speech) return null;
+      const vs = speech.getVoices().filter(v => /^en/i.test(v.lang));
+      return vs.find(v => /male|david|guy|daniel|george/i.test(v.name) && !/female/i.test(v.name)) || vs[0] || null;
+    }
+    // When each subtitle starts in the recording: split the speech by length of text, then move
+    // each cut to the nearest pause
+    function lineStarts(buf, lines) {
+      const d = buf.getChannelData(0), win = Math.round(buf.sampleRate * 0.02);
+      const rms = [];
+      for (let i = 0; i + win <= d.length; i += win) {
+        let s = 0;
+        for (let k = i; k < i + win; k++) s += d[k] * d[k];
+        rms.push(Math.sqrt(s / win));
+      }
+      const peak = rms.reduce((a, v) => Math.max(a, v), 0);
+      const loud = rms.map(v => v > peak * 0.08);
+      const first = Math.max(0, loud.indexOf(true)), last = loud.lastIndexOf(true);
+      const gaps = [];
+      let run = -1;
+      for (let i = first; i <= last; i++) {
+        if (!loud[i]) { if (run < 0) run = i; }
+        else { if (run >= 0 && i - run >= 10) gaps.push((run + i) / 2 * 0.02); run = -1; }
+      }
+      const S = first * 0.02, E = (last + 1) * 0.02;
+      const total = lines.reduce((n, l) => n + l.length, 0);
+      const starts = [S];
+      let acc = 0;
+      for (let i = 1; i < lines.length; i++) {
+        acc += lines[i - 1].length;
+        const guess = S + (E - S) * acc / total;
+        let best = guess, off = 1.6;
+        for (const g of gaps) if (g > starts[i - 1] + 0.5 && Math.abs(g - guess) < off) { off = Math.abs(g - guess); best = g; }
+        starts.push(best);
+      }
+      return starts;
+    }
+    async function startBriefing() {
+      if (brief || briefed || !map.briefing) return;
+      const B = map.briefing, b = brief = { B, i: -1, text: null, shown: 0 };
+      hud.radioFrom.textContent = B.from;
+      hud.radioText.textContent = '';
+      hud.radio.hidden = false;
+      Sound.radio();
+      const [voice, lift] = await Promise.all([withTimeout(preload(B.voice)), withTimeout(preload(B.lift))]);
+      if (brief !== b) return;
+      b.liftBuf = lift;
+      if (voice) {
+        b.starts = lineStarts(voice, B.lines);
+        b.dur = voice.duration;
+        b.src = Sound.play(voice, { radio: true, gain: 0.95 });
+        b.t0 = Sound.ctx.currentTime;
+        b.src.onended = () => { if (brief === b) doneTalking(); };
+      } else {
+        b.voice = pickVoice();
+        speakNext();
+      }
+    }
+    function setLine(i, segDur) {
+      const b = brief;
+      b.i = i; b.text = b.B.lines[i]; b.shown = 0;
+      b.rate = segDur ? Math.max(24, b.text.length / Math.max(0.6, segDur * 0.75)) : 38;
+      if (i === b.B.liftAt) arrive(b);
+    }
+    function typeBriefing(dt) {
+      const b = brief;
+      if (b.starts) {
+        const t = Sound.ctx.currentTime - b.t0;
+        let i = b.i;
+        while (i + 1 < b.starts.length && b.starts[i + 1] <= t) i++;
+        if (i > b.i) setLine(i, (i + 1 < b.starts.length ? b.starts[i + 1] : b.dur) - b.starts[i]);
+      }
+      if (b.text == null || b.shown >= b.text.length) return;
+      b.shown = Math.min(b.text.length, b.shown + dt * b.rate);
+      hud.radioText.textContent = b.text.slice(0, Math.ceil(b.shown));
+    }
+    // no recording: the browser reads the lines one by one
+    function speakNext() {
+      const b = brief;
+      if (!b) return;
+      clearTimeout(b.timer);
+      const i = b.i + 1;
+      if (i >= b.B.lines.length) { doneTalking(); return; }
+      setLine(i);
+      const text = b.B.lines[i];
+      const after = ms => { if (brief === b && b.i === i) { clearTimeout(b.timer); b.timer = setTimeout(speakNext, ms); } };
+      if (b.voice) {
+        const u = new SpeechSynthesisUtterance(text.replace('Mr.', 'Mister').replace('Ms.', 'Miz'));
+        u.voice = b.voice; u.lang = b.voice.lang; u.rate = 1.02; u.pitch = 0.8;
+        u.onend = u.onerror = () => after(450);
+        speech.speak(u);
+      }
+      b.timer = setTimeout(speakNext, text.length * (b.voice ? 90 : 48) + 1500);   // in case the voice never ends
+    }
+    function stopBriefing() {
+      const b = brief;
+      if (!b) return;
+      clearTimeout(b.timer);
+      if (b.src) { b.src.onended = null; try { b.src.stop(); } catch (e) {} }
+      if (speech) speech.cancel();
+      brief = null;
+      hud.radio.hidden = true;
+      return b;
+    }
+    // the radio goes quiet (or E skipped it); the lift arrives if it hasn't yet
+    function doneTalking() {
+      const b = stopBriefing();
+      if (!b) return;
+      briefed = true;
+      Sound.radio();
+      arrive(b);
+    }
+    // the lift reaches the floor: its ding, then the doors open and the clock starts
+    function arrive(b) {
+      if (b.arrived) return;
+      b.arrived = true;
+      const open = () => { if (map.openLift) map.openLift(); missionOn = true; chat(map.hint); };
+      if (b.liftBuf) { Sound.play(b.liftBuf, { gain: 0.7 }); setTimeout(open, Math.max(0, b.liftBuf.duration * 1000 - 200)); }
+      else { Sound.ding(); setTimeout(open, 600); }
+    }
 
     function showPause() {
       state = 'paused';
       pauseEl.hidden = false;
       hud.use.hidden = true;
+      if (resumeWait) { resumeWait = false; hud.center.hidden = true; }
+    }
+    // paused without the menu: a click on the game locks the mouse again, Esc opens the menu
+    let resumeWait = false;
+    function waitForClick() {
+      state = 'paused';
+      pauseEl.hidden = true;
+      hud.use.hidden = true;
+      resumeWait = true;
+      clearTimeout(centerTimer);
+      hud.center.textContent = 'Click to continue';
+      hud.center.hidden = false;
     }
     pauseEl.addEventListener('click', e => {
       const a = e.target.closest('a[data-act]');
@@ -1202,8 +1467,8 @@
       e.preventDefault();
       const act = a.dataset.act;
       if (act === 'resume') lock();
-      else if (act === 'files') openFiles();
-      else if (act === 'contact') openFile(fileFor('contact'), null);
+      else if (act === 'cv') openCV();
+      else if (act === 'contact') openWindow($('#contact'), { mac: true, app: 'Contacts' });
       else if (act === 'map') switchMap(MAPS.find(n => n !== map.name));
       else if (act === 'motd') openWindow(buildMotd());
       else if (act === 'classic') exit('#desktop');
@@ -1224,6 +1489,8 @@
       if (document.pointerLockElement === canvas) {
         state = 'playing';
         pauseEl.hidden = true;
+        if (!briefed && map.briefing) setTimeout(startBriefing, 700);
+        if (resumeWait) { resumeWait = false; hud.center.hidden = true; }
         for (const k in keys) keys[k] = false;
       } else if (state === 'playing') {
         showPause();
@@ -1253,14 +1520,15 @@
       if (state === 'off') return;
       if (state === 'modal') {
         if (e.key === 'Escape') { e.preventDefault(); closeModal(false); }
-        // Tab closes the file browser again (inside a CV window it moves focus as usual)
-        else if (e.code === 'Tab' && modal && modal.kind === 'files') { e.preventDefault(); closeModal(true); }
+        // E or Tab puts the MacBook away again
+        else if ((e.code === 'Tab' || e.code === 'KeyE') && !e.repeat && modal && modal.kind === 'cv') { e.preventDefault(); closeModal(true); }
         return;
       }
+      if (state === 'paused' && resumeWait && e.key === 'Escape') { showPause(); return; }
       if (state !== 'playing') return;
-      if (e.code === 'Tab') { e.preventDefault(); if (!e.repeat && !anim && !lapInsp) openFiles(); return; }
+      if (e.code === 'Tab') { e.preventDefault(); if (!e.repeat && !anim && !lapInsp) { Sound.use(); openCV(); } return; }
       if (e.code === 'Space') { e.preventDefault(); if (!e.repeat) jumpQueued = true; }
-      if (e.code === 'KeyE' && !e.repeat && lookTarget) usePanel(lookTarget);
+      if (e.code === 'KeyE' && !e.repeat) { if (brief) doneTalking(); else usePanel(lookTarget); }
       if (e.code === 'KeyF' && !e.repeat) inspect();
       keys[e.code] = true;
     });
@@ -1290,8 +1558,12 @@
       if (state === 'playing') {
         const n = Math.ceil(dt / 0.008);
         for (let i = 0; i < n; i++) physics(dt / n);
-        roundLeft -= dt;
-        if (roundLeft <= 0) { roundLeft = 115; centerMsg('Round Draw'); }
+        if (missionOn) {
+          const was = roundLeft;
+          roundLeft = Math.max(0, roundLeft - dt);
+          battery = Math.max(3, battery - dt * 0.12);
+          if (was > 0 && roundLeft === 0) { centerMsg("Time's up. The CV is still out there", 4); chat('<span class="ct">HQ:</span> Out of time, agent. Finish it anyway.'); }
+        }
       }
 
       // camera
@@ -1448,7 +1720,7 @@
       }
       if (map.update) map.update(dt, clock);
       for (const d of screens) drawTerminal(d);
-      if (anim && anim.type === 'enter') drawScreen('connect', anim.def, Math.min(1, anim.t / (anim.dur * 0.7)), anim.fresh);
+      if (anim && anim.type === 'enter') drawScreen('connect', anim.def || SELF, Math.min(1, anim.t / (anim.dur * 0.7)), anim.fresh);
       else if (modal && modal.viaLaptop) drawScreen('connect', null, 1);
       else if (lookTarget && !(anim && anim.type === 'inspect') && !lapInsp) drawScreen('wake', lookTarget);
       else drawScreen('off');
@@ -1457,6 +1729,14 @@
       hud.cursor.classList.toggle('over', !!lookTarget);
       const secs = Math.max(0, Math.ceil(roundLeft));
       hud.time.textContent = `${Math.floor(secs / 60)}:${String(secs % 60).padStart(2, '0')}`;
+      hud.timeWrap.classList.toggle('low', missionOn && secs <= 30);
+      const b = Math.round(battery);
+      if (hud.batt.textContent !== String(b)) {
+        hud.batt.textContent = b;
+        hud.battFill.setAttribute('width', (17 * b / 100).toFixed(2));
+        hud.battWrap.classList.toggle('low', b <= 20);
+      }
+      if (brief) typeBriefing(dt);
       drawRadar();
 
       renderer.clear();
@@ -1477,15 +1757,16 @@
         openWindow(buildMotd());
         setTimeout(() => {
           chat('<span class="ct">Recruiter</span> is joining the Counter-Terrorist force');
-          chat(map.hint);
+          if (!map.briefing) chat(map.hint);
         }, 300);
       } else {
         showPause();
       }
     }
     function exit(target) {
-      if (modal) closeModalSilently();
+      if (modal) restoreModal();
       anim = null; hackDef = null; fxEl.hidden = true; screenKey = ''; drawScreen('off');
+      stopBriefing();
       state = 'off';
       if (document.pointerLockElement) document.exitPointerLock();
       renderer.setAnimationLoop(null);
@@ -1494,10 +1775,6 @@
       root.classList.remove('in-game');
       const t = target && document.querySelector(target);
       if (t) t.scrollIntoView();
-    }
-    function closeModalSilently() {
-      if (modal.parent) modal.parent.insertBefore(modal.el, modal.next); else modal.el.remove();
-      modal = null; modalEl.hidden = true; hud.root.hidden = false;
     }
 
     mapTextures = [];   // the view model's own textures stay when maps change

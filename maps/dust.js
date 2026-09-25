@@ -266,11 +266,9 @@ export function build(ctx) {
   ctx.add(sun, sun.target);
 
   /* --------------------------------------------------------- panels */
-  const S = ctx.SKILLS.map(s => 'skills:' + s.id);   // the one Skills panel here covers every skill desk
   const panelDefs = [
-    { id: 'about', section: 'about', title: 'About', heading: 'João Furukawa', lines: ['Junior Software Developer @ TUU', 'M.Sc. AI · University of Coimbra', 'Full-stack · LLM tools · RAG'], at: [-5.96, 1.9, 16], face: '+x' },
     { id: 'career', section: 'career', title: 'Career', heading: 'Experience & Education', lines: ['Intern → Junior Dev @ TUU', '08/2025 — present', 'M.Sc. AI · B.Sc. Informatics Eng.'], at: [5.96, 1.9, 16], face: '-x' },
-    { id: 'skills', section: 'skills', keys: S, title: 'Options — Skills', heading: 'Skills', lines: ['JS / TS · React · Node.js', 'Python · SQL · Java · C', 'RAG · PyTorch · Docker · Azure'], at: [-2.96, 1.9, -3], face: '+x' },
+    { id: 'skills', section: 'skills', title: 'Options — Skills', heading: 'Skills', lines: ['JS / TS · React · Node.js', 'Python · SQL · Java · C', 'RAG · PyTorch · Docker · Azure'], at: [-2.96, 1.9, -3], face: '+x' },
     { id: 'work', section: 'work', title: 'Projects — Work @ TUU', heading: 'Work @ TUU', lines: ['AI assistant in Microsoft Teams', 'Internal platforms & automation', 'Company website & design system'], at: [3, 1.9, -25.96], face: '+z' },
     { id: 'personal', section: 'personal', title: 'Projects — Personal & Uni', heading: 'Personal & University', lines: ['FutSabado · Googol · DEIChain', 'Mario AI · ArtBench · Potrivia'], at: [17.96, 1.9, -13.5], face: '-x' },
     { id: 'contact', section: 'contact', title: 'Contact', heading: 'Get in touch', lines: ['Email · GitHub · LinkedIn', 'Download CV (PDF)'], at: [12.5, 2.8, -25.96], face: '+z' },
@@ -329,7 +327,7 @@ export function build(ctx) {
     vmLight: { sky: 0xd6e4f5, ground: 0xa5824f, hemi: 1.3, sun: 0xfff0d0, sunI: 1.8 },
     shadows: true,
     verb: 'connect to',
-    motd: 'Find the six panels on the walls, walk up to one and press E to jack your <span class="accent">MacBook</span> into it.',
+    motd: 'Find the five panels on the walls, walk up to one and press E to jack your <span class="accent">MacBook</span> into it.',
     hint: '* Find the panels and jack into them (E)',
   };
 }

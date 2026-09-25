@@ -1,6 +1,7 @@
-/* cs_office_cv: a small night-time office after cs_office. Every CV section is a locked
-   workstation: reception (About), six cubicles (one per skill category), the meeting corner
-   (Work, Personal), the boss's office (Career). Hack all ten and the server room opens (Contact).
+/* cs_office_cv: a small night-time office after cs_office. You arrive in the lift; HQ briefs you
+   and the doors open. Four windows of the CV page are locked workstations: one of the cubicles
+   (Skills), the meeting corner (Work, Personal), the boss's office (Career). Hack them and the
+   server room opens: its console holds the last piece, Contact.
    Local runs use the real cs_office textures (assets-local, never published); the public site
    gets simple painted stand-ins with the same layout. */
 export const name = 'cs_office_cv';
@@ -147,7 +148,7 @@ export function build(ctx) {
   }
   function keyboard(parent, x, z) {
     const top = image('keyboard') || flat(0xe0dccd);
-    cube(0.44, 0.025, 0.15, [M.plastic, M.plastic, top, M.plastic, M.plastic, M.plastic], x, TOP, z, parent);
+    cube(0.44, 0.025, 0.15, [M.plastic, M.plastic, top, M.plastic, M.plastic, M.plastic], x, 0, z, parent);   // parent sits on the desk
   }
   // A beige CRT on a desk. With a def it's a terminal: the game draws the lock screen and you hack it.
   function crt(x, z, face, def = null, y = TOP) {
@@ -222,7 +223,9 @@ export function build(ctx) {
   box(-11.2, 11.2, H, H + 0.12, -8.2, 8.2, M.ceiling);
 
   wallBox(-11.2, -11, -8, 8);                                              // west
-  wallBox(-11.2, 3, 8, 8.2);                                               // south (lifts)
+  wallBox(-11.2, -7.05, 8, 8.2);                                           // south (lifts)
+  wallBox(-5.75, 3, 8, 8.2);
+  wallBox(-7.05, -5.75, 8, 8.2, {}, 2.3, H);                               // over the lift doors
   wallBox(3, 11.2, 8, 8.2, { nz: M.serverWall });
   wallBox(11, 11.2, -8, 0, { nx: M.bossWall });                            // east
   wallBox(11, 11.2, 0, 8.2, { nx: M.serverWall });
@@ -283,23 +286,45 @@ export function build(ctx) {
   add(snow);
 
   /* ------------------------------------------------------ main office */
-  const T = (key, host, extra = {}) => ({ ...fileFor(key), id: key, keys: [key], host, ...extra });
+  const T = (key, host, owner) => ({ ...fileFor(key), id: key, keys: [key], host, owner });
+  // whose computer it is, on a nameplate next to it and on its lock screen
+  const OWNER = { skills: 'Jane Doe', work: 'John Doe', personal: 'Janie Doe', career: 'John Doe Sr.', contact: 'root' };
+  const T5 = (key, host) => T(key, host, OWNER[key]);
+  const DESK_OWNERS = ['Jim Doe', 'Jenny Doe', 'Jack Doe', 'Joan Doe', 'Jeff Doe'];   // the other cubicles
+  const nameplate = (def, w, x, y, z, face) =>
+    plane(w, w * 0.19, labelTex([[def.owner, 34, '#e8e6de'], [def.host, 26, '#c4b550']], 512, 96), x, y, z, face);
 
-  // lifts and reception (you arrive here)
-  hang('lift', 0x6f7680, 1.3, 2.3, -6.4, 1.15, 7.98, '-z');
+  // lifts and reception. You arrive in the left lift; the right one is only a picture.
   hang('lift', 0x6f7680, 1.3, 2.3, -3.6, 1.15, 7.98, '-z');
+  const liftDoor = flat(0x9ea3aa), cab = flat(0x8a8d93);
+  box(-7.3, -7.2, 0, 2.5, 8.2, 10, cab);                    // the cab: sides, back, roof
+  box(-5.6, -5.5, 0, 2.5, 8.2, 10, cab);
+  box(-7.3, -5.5, 0, 2.5, 9.9, 10, cab);
+  box(-7.3, -5.5, 2.5, 2.6, 8.2, 10, M.light);
+  box(-7.3, -5.5, -0.1, 0, 8.2, 10, M.carpet, { collide: false });
+  box(-7.12, -7.05, 0, 2.36, 7.94, 8.0, M.metal, { collide: false });   // door frame
+  box(-5.75, -5.68, 0, 2.36, 7.94, 8.0, M.metal, { collide: false });
+  box(-7.12, -5.68, 2.3, 2.36, 7.94, 8.0, M.metal, { collide: false });
+  box(-5.55, -5.45, 1.1, 1.3, 7.97, 8.0, M.dark, { collide: false });   // call button
+  const floorSign = plane(0.3, 0.15, labelTex([['▼ 1', 44, '#ff5a3c']], 128, 64, '#0d0d0d'), -6.4, 2.5, 7.99, '-z');
+  floorSign.material.polygonOffset = true; floorSign.material.polygonOffsetFactor = -2;
+  const doorL = box(-7.05, -6.4, 0, 2.3, 8.04, 8.12, liftDoor);
+  const doorR = box(-6.4, -5.75, 0, 2.3, 8.04, 8.12, liftDoor);
+  const cabLight = new THREE.PointLight(0xfff1d6, 3, 4, 1.5);
+  cabLight.position.set(-6.4, 2.3, 9.1); add(cabLight);
   hang('exit', 0xaa2020, 0.5, 0.25, -5, 2.75, 7.97, '-z');
   hang('clock', 0xeeeeee, 0.4, 0.4, -1.4, 2.4, 7.97, '-z');
   hang('companySign', 0x7a4a20, 1.8, 0.6, -10.97, 2.2, 4.7, '+x');
   // reception counter, its PC facing the lifts
   box(-10.2, -7.4, 0, 1.05, 4.3, 4.9, M.desk);
   box(-10.3, -7.3, 1.05, 1.1, 4.15, 5.1, M.desk);
-  crt(-8.6, 4.5, '+z', T('about', 'reception-01'), 1.1);
+  crt(-8.6, 4.5, '+z', null, 1.1);
   chair(-8.6, 3.6, '+z');
   plant(-10.5, 7.5, 1.1);
   plant(-0.6, 7.5, 1.1);
 
-  // the cubicles: two rows of three, back to back along a spine at z = -2
+  // the cubicles: two rows of three, back to back along a spine at z = -2. Only the first one
+  // holds a CV file (Skills); the others are someone else's desk.
   partition(-9.1, -2.3, -2.03, -1.97);
   for (const x of [-9.1, -6.87, -4.63, -2.4]) partition(x, x + 0.06, -2.95, -1.05);
   const pods = [[-7.95, -1], [-5.72, -1], [-3.49, -1], [-7.95, 1], [-5.72, 1], [-3.49, 1]];
@@ -307,12 +332,14 @@ export function build(ctx) {
     const [x, side] = pods[i];                 // side -1: north row, screens facing north; 1: south row
     const face = side < 0 ? '-z' : '+z';
     const dz = side * 0.42;
+    const def = i === 0 ? T5('skills', 'dev-pod-01') : null;
     desk(x, -2 + dz, face, 1.9, 0.78);
-    crt(x + 0.25, -2 + side * 0.36, face, T('skills:' + s.id, s.host));
+    crt(x + 0.25, -2 + side * 0.36, face, def);
     pcTower(x - 0.7, -2 + side * 0.3, face);
     chair(x + 0.2, -2 + side * 1.2, face === '-z' ? '+z' : '-z');
     // nameplate on top of the spine
-    const plate = plane(0.9, 0.17, labelTex([[s.host, 34, '#e8e6de'], [s.heading, 28, '#c4b550']], 512, 96), x, 1.36, -2 + side * 0.035, face);
+    const [top, bottom] = def ? [def.owner, def.host] : [DESK_OWNERS[i - 1], s.host];
+    const plate = plane(0.9, 0.17, labelTex([[top, 34, '#e8e6de'], [bottom, 28, def ? '#c4b550' : '#a8a498']], 512, 96), x, 1.36, -2 + side * 0.035, face);
     plate.material.side = THREE.FrontSide;
   });
   // filing cabinets and a printer corner by the windows
@@ -331,7 +358,8 @@ export function build(ctx) {
   {
     const g = group(2.93, -6.0, '-x', 1.75);
     cube(1.56, 0.94, 0.07, M.black, 0, -0.47, -0.035, g);
-    const def = T('work', 'meeting-tv');
+    const def = T5('work', 'meeting-tv');
+    nameplate(def, 0.7, 2.965, 1.12, -6.0, '-x');
     const scr = ctx.screen(def, 1.42, 0.8);
     scr.position.set(0, 0, 0.004); g.add(scr);
     const hit = mesh(new THREE.PlaneGeometry(1.7, 1.1), M.black, 0, 0, 0.05, g);
@@ -344,7 +372,8 @@ export function build(ctx) {
     cube(0.36, 0.02, 0.25, M.metal, 0, 0, 0, g);
     const lid = new THREE.Group(); lid.position.set(0, 0.02, -0.12); lid.rotation.x = -0.25; g.add(lid);
     cube(0.36, 0.24, 0.012, M.metal, 0, 0, 0, lid);
-    const def = T('personal', 'meeting-laptop');
+    const def = T5('personal', 'meeting-laptop');
+    nameplate(def, 0.34, 1.64, 0.775, -5.4, '+z');   // a little tent card next to it
     const scr = ctx.screen(def, 0.32, 0.2);
     scr.position.set(0, 0.12, 0.0065); lid.add(scr);
     const hit = mesh(new THREE.PlaneGeometry(0.62, 0.45), M.black, 0, 0.14, 0.05, g);
@@ -390,7 +419,9 @@ export function build(ctx) {
 
   /* ---------------------------------------------------- boss's office */
   desk(7.9, -4.1, '-x', 2.3, 1.05, M.desk);
-  crt(7.75, -4.35, '-x', T('career', 'president-pc'));
+  const boss = T5('career', 'president-pc');
+  crt(7.75, -4.35, '-x', boss);
+  nameplate(boss, 0.42, 7.45, 0.8, -3.5, '-x');     // standing on the desk
   {
     const g = group(9.2, -4.1, '-x');   // the big leather chair
     cube(0.7, 0.14, 0.62, M.black, 0, 0.4, 0, g);
@@ -435,9 +466,9 @@ export function build(ctx) {
       solidify(g);
     }
   }
-  // the console at the far end: Contact, sealed until everything else is hacked
+  // the console at the far end: the last piece (Contact), sealed until every workstation is hacked
   desk(10.35, 4.35, '-x', 1.4, 0.8, M.metal);
-  const finale = T('contact', 'srv-core-01', { finale: true, locked: true });
+  const finale = { ...T5('contact', 'srv-core-01'), finale: true, locked: true };
   crt(10.3, 4.35, '-x', finale);
   hang('serverPanel', 0x33383f, 1.2, 0.72, 10.97, 1.8, 6.6, '-x');
   hang('worldMap', 0x2a4a6a, 1.6, 1.1, 10.97, 1.9, 2.2, '-x');
@@ -455,6 +486,12 @@ export function build(ctx) {
   add(new THREE.HemisphereLight(0xb8c6de, 0x3a332c, 0.75));
 
   let doorT = -1;   // -1 closed, 0..1 sliding open
+  let liftT = -1;   // the lift doors, the same way
+  function openLift(instant = false) {
+    if (liftT >= 0) return;
+    doorL.userData.collider.maxY = doorR.userData.collider.maxY = -1;
+    liftT = instant ? 1 : 0;
+  }
   function unlock(instant = false) {
     finale.locked = false;
     keypad.locked = false;
@@ -466,6 +503,8 @@ export function build(ctx) {
   function update(dt, t) {
     if (doorT >= 0 && doorT < 1) doorT = Math.min(1, doorT + dt / 1.4);
     if (doorT >= 0) serverDoor.position.z = 1.2 * doorT * doorT * (3 - 2 * doorT);
+    if (liftT >= 0 && liftT < 1) liftT = Math.min(1, liftT + dt / 1.6);
+    if (liftT >= 0) { const k = liftT * liftT * (3 - 2 * liftT); doorL.position.x = -0.63 * k; doorR.position.x = 0.63 * k; }
     // one tube on its way out
     flicker.intensity = Math.sin(t * 37) > 0.93 || Math.sin(t * 3.1) > 0.985 ? 1.2 : 6;
     red.intensity = finale.locked ? 5 + Math.sin(t * 4) * 3 : 4;
@@ -481,13 +520,28 @@ export function build(ctx) {
   }
 
   return {
-    spawn: { x: -5, y: 0, z: 6.6, yaw: 0 },
+    spawn: { x: -6.4, y: 0, z: 9.25, yaw: 0 },
     fog: new THREE.Fog(0x0b111c, 30, 90),
-    radar: { scale: 9, dot: 0.7, color: 'rgba(170,185,210,.32)', areas: [[-11, -8, 14, 16], [3.2, -8, 7.8, 8], [3.2, 0.2, 7.8, 7.8]] },
+    radar: { scale: 9, dot: 0.7, color: 'rgba(170,185,210,.32)', areas: [[-11, -8, 14, 16], [3.2, -8, 7.8, 8], [3.2, 0.2, 7.8, 7.8], [-7.2, 8.2, 1.6, 1.7]] },
     vmLight: { sky: 0xdfe6f2, ground: 0x4a4038, hemi: 1.15, sun: 0xfff3de, sunI: 1.1 },
     verb: 'hack',
-    motd: 'The office is empty tonight and every workstation is locked. Walk up to one, press E and let your <span class="accent">MacBook</span> crack it: whatever you pull off it stays on the MacBook (Tab). Hack all ten and the server room opens.',
-    hint: '* Hack the workstations with your MacBook (E). Tab shows what you have.',
+    motd: 'The office is empty tonight and every workstation is locked. Walk up to one, press E and let your <span class="accent">MacBook</span> crack it. Press E anywhere else to open the CV on your MacBook: every section you have not hacked yet is still encrypted. Hack all four and the server room opens; the last piece is on its console.',
+    // on the radio while you ride up (subtitles for the recording); the lift arrives on line liftAt
+    briefing: {
+      from: 'Agent Schrute',
+      voice: 'sounds/briefing-schrute.mp3',
+      lift: 'sounds/elevator-arrive.mp3',
+      liftAt: 3,
+      lines: [
+        'A CV has been encrypted and split into files. They are hidden in this office.',
+        'Four computers, four files. Hack them with your little MacBook.',
+        'Then the server room opens. The final piece, the contact, is inside. Trust me.',
+        'The clock is ticking... Doors opening...',
+        'Do not screw this up or I will tell Michael. Over.',
+      ],
+    },
+    openLift,
+    hint: '* E opens your MacBook. Aim at a workstation and press E to hack it.',
     unlock,
     update,
   };

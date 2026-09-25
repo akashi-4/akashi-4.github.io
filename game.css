@@ -87,8 +87,8 @@
     radial-gradient(ellipse at center, #1f2c1b 0%, #0b100a 78%);
 }
 .enter-fx[hidden] { display: none; }
-.game-modal .cs-dialog.crt-in { animation: crt-in .38s ease-out both; }
-.game-modal .cs-dialog.crt-out { animation: crt-out .22s ease-in both; }
+.game-modal .crt-in { animation: crt-in .38s ease-out both; }
+.game-modal .crt-out { animation: crt-out .22s ease-in both; }
 @keyframes crt-in {
   0% { transform: scale(.55, .004); filter: brightness(4); opacity: .3; }
   45% { transform: scale(1, .012); filter: brightness(3); opacity: 1; }
@@ -100,53 +100,179 @@
   100% { transform: scale(0, .004); filter: brightness(5); opacity: 0; }
 }
 @media (prefers-reduced-motion: reduce) {
-  .game-modal .cs-dialog.crt-in, .game-modal .cs-dialog.crt-out { animation-duration: .01s; }
+  .game-modal .crt-in, .game-modal .crt-out { animation-duration: .01s; }
 }
 
-/* MacBook: windows you jacked into (and the Tab file browser) show on the laptop's own screen */
-.game-modal:not(.mac) .mac-frame { display: contents; }
-.game-modal:not(.mac) .mac-bar { display: none; }
+/* MacBook: what you open with E (and the windows you jacked into) show on the laptop's own screen,
+   a macOS desktop: menu bar, wallpaper, icons on the right, the Dock */
+.game-modal:not(.mac) .mac-frame, .game-modal:not(.mac) .mac-desk { display: contents; }
+.game-modal:not(.mac) .mac-bar, .game-modal:not(.mac) .mac-icons, .game-modal:not(.mac) .mac-dock { display: none; }
 .game-modal.mac { background: rgba(0, 0, 0, .7); }
 .game-modal.mac .mac-frame {
   position: relative; display: flex; flex-direction: column;
-  width: min(1180px, 100%); height: min(780px, 100%);
-  padding: 30px 22px 22px; border-radius: 22px; background: #0a0a0c;
+  width: min(1400px, 100%); height: min(880px, 100%);
+  padding: 26px 18px 18px; border-radius: 22px; background: #0a0a0c;
   box-shadow: 0 0 0 2px #2c2d31, 0 0 0 7px #b9bcc3, 0 0 0 8px #8d9097, 0 30px 90px rgba(0, 0, 0, .7);
 }
 .game-modal.mac .mac-frame::before {   /* the notch */
-  content: ''; position: absolute; left: 50%; top: 0; width: 160px; height: 26px; margin-left: -80px;
-  background: #0a0a0c; border-radius: 0 0 12px 12px; z-index: 2;
+  content: ''; position: absolute; left: 50%; top: 0; width: 160px; height: 30px; margin-left: -80px;
+  background: #0a0a0c; border-radius: 0 0 12px 12px; z-index: 3;
 }
 .game-modal.mac .mac-bar {
-  display: flex; justify-content: space-between; align-items: center; gap: 12px;
-  height: 26px; padding: 0 12px; background: rgba(20, 22, 30, .92); color: #d8dbe2;
-  font: 13px -apple-system, "Segoe UI", Arial, sans-serif; border-radius: 6px 6px 0 0;
+  position: relative; z-index: 2; display: flex; justify-content: space-between; align-items: center; gap: 12px;
+  height: 26px; padding: 0 14px; color: #fff; border-radius: 6px 6px 0 0;
+  background: rgba(24, 20, 48, .5); backdrop-filter: blur(20px);
+  font: 13px -apple-system, BlinkMacSystemFont, "Segoe UI", Arial, sans-serif;
 }
-.game-modal.mac .mac-bar span { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.mac-bar .mac-menus, .mac-bar .mac-status { display: flex; align-items: center; gap: 18px; white-space: nowrap; overflow: hidden; }
+.mac-bar .mac-status { gap: 14px; }
+.mac-bar svg { height: 13px; width: auto; fill: currentColor; flex: none; }
+.mac-bar svg.apple { height: 15px; margin-top: -2px; }
+.mac-bar b { font-weight: 700; }
+@media (max-width: 900px) { .mac-bar .mac-menus span { display: none; } }
+
+.game-modal.mac .mac-desk {
+  position: relative; flex: 1; min-height: 0; overflow: hidden; border-radius: 0 0 6px 6px;
+  background:
+    url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 1600 1000' preserveAspectRatio='none'%3E%3Cpath d='M0 640C260 560 470 700 760 620s560-170 840-60v440H0z' fill='%23f08a6c' fill-opacity='.35'/%3E%3Cpath d='M0 760c300-90 520 60 820-10s520-150 780-40v290H0z' fill='%23ffb36b' fill-opacity='.4'/%3E%3Cpath d='M0 880c340-70 600 40 900-20s460-70 700-10v150H0z' fill='%23ffd29a' fill-opacity='.35'/%3E%3C/svg%3E") bottom / 100% 100% no-repeat,
+    radial-gradient(ellipse 70% 55% at 78% 100%, rgba(255, 168, 96, .9), transparent 70%),
+    radial-gradient(ellipse 60% 55% at 12% 92%, rgba(226, 78, 124, .85), transparent 70%),
+    radial-gradient(ellipse 85% 60% at 50% 55%, rgba(118, 78, 200, .7), transparent 70%),
+    linear-gradient(180deg, #0e1a4a 0%, #22307a 34%, #613c9e 64%, #d0607c 100%);
+}
 .game-modal.mac .game-modal-inner {
-  flex: 1; max-width: none; min-height: 0; padding: 18px; align-items: flex-start;
-  background: radial-gradient(ellipse at 30% 20%, #2b3a55 0%, #141a26 55%, #0b0e15 100%);
-  border-radius: 0 0 6px 6px;
+  position: absolute; inset: 0 104px 78px 0; max-width: none; max-height: none;
+  padding: 16px; display: block; overflow: auto;
 }
-.game-modal.mac .game-modal-inner > .cs-dialog { margin: auto; }
+.game-modal.mac .game-modal-inner > .cs-dialog { margin: 24px auto; }
 
-/* Tab: files on the MacBook */
-.files .files-sum { margin-bottom: 10px; }
-.files .file-list { list-style: none; margin: 0; padding: 0; display: grid; gap: 4px; }
-.files .file-row {
-  display: grid; grid-template-columns: 14em 1fr; gap: 12px; width: 100%; text-align: left;
-  padding: 6px 10px; font: inherit; color: var(--text, #dedfd6); background: rgba(0, 0, 0, .18);
-  border: 1px solid transparent;
+/* desktop icons */
+.mac-icons { position: absolute; top: 12px; right: 8px; width: 92px; margin: 0; padding: 0; list-style: none; display: grid; gap: 14px; }
+.mac-icons li {
+  display: flex; flex-direction: column; align-items: center; gap: 5px; text-align: center;
+  font: 11.5px/1.25 -apple-system, BlinkMacSystemFont, "Segoe UI", Arial, sans-serif; color: #fff;
+  text-shadow: 0 1px 2px rgba(0, 0, 0, .8); overflow-wrap: anywhere;
 }
-.files button.file-row { cursor: pointer; }
-.files button.file-row:hover, .files button.file-row:focus-visible { border-color: var(--accent, #c4b550); background: rgba(0, 0, 0, .3); outline: none; }
-.files .file-row .name { color: var(--accent, #c4b550); }
-.files .file-row.missing { opacity: .55; }
-.files .file-row.missing .name { color: inherit; }
-@media (max-width: 560px) { .files .file-row { grid-template-columns: 1fr; gap: 0; } }
+.mac-icons i { position: relative; display: block; width: 50px; height: 50px; }
+.mac-icons .ic-hd::before {
+  content: ''; position: absolute; left: 2px; right: 2px; top: 12px; bottom: 8px; border-radius: 5px;
+  background: linear-gradient(#f1f2f5, #b3b6be); box-shadow: 0 2px 4px rgba(0, 0, 0, .35), inset 0 -3px 0 #9a9ea7;
+}
+.mac-icons .ic-hd::after { content: ''; position: absolute; right: 9px; bottom: 15px; width: 5px; height: 5px; border-radius: 50%; background: #5ddc6a; }
+.mac-icons .ic-folder::before { content: ''; position: absolute; left: 3px; top: 9px; width: 20px; height: 8px; border-radius: 3px 3px 0 0; background: #58a9ef; }
+.mac-icons .ic-folder::after {
+  content: ''; position: absolute; left: 3px; right: 3px; top: 14px; bottom: 6px; border-radius: 3px 5px 5px 5px;
+  background: linear-gradient(#8fcbfb, #4d9ff0); box-shadow: 0 2px 4px rgba(0, 0, 0, .3);
+}
+.mac-icons .ic-pdf::before {
+  content: ''; position: absolute; left: 9px; right: 9px; top: 2px; bottom: 2px; border-radius: 2px;
+  background: linear-gradient(225deg, #d8d8dc 6px, #fff 6px); box-shadow: 0 2px 4px rgba(0, 0, 0, .35);
+}
+.mac-icons .ic-pdf::after {
+  content: 'PDF'; position: absolute; left: 9px; right: 9px; bottom: 9px; padding: 1px 0; text-align: center;
+  font: 700 9px Arial, sans-serif; color: #fff; background: #e0443b; text-shadow: none;
+}
+.mac-icons .ic-shot::before {
+  content: ''; position: absolute; left: 2px; right: 2px; top: 9px; bottom: 9px; border: 3px solid #fff;
+  background: linear-gradient(160deg, #2c3a86, #8e4fb0 55%, #f39a6c); box-shadow: 0 2px 4px rgba(0, 0, 0, .35);
+}
 
-/* a skill desk holds a single category of the Skills window */
-.game-modal .cat-hidden { display: none !important; }
-.game-modal .one-category .skills { grid-template-columns: 1fr; }
-.game-modal .cs-dialog.window.one-category { max-width: 640px; }
+/* the Dock */
+.mac-dock {
+  position: absolute; left: 50%; bottom: 8px; transform: translateX(-50%); z-index: 2;
+  display: flex; align-items: center; gap: 8px; padding: 6px 8px;
+  background: rgba(255, 255, 255, .2); backdrop-filter: blur(18px);
+  border: 1px solid rgba(255, 255, 255, .3); border-radius: 18px;
+}
+.mac-dock b { align-self: stretch; width: 1px; margin: 4px 2px; background: rgba(255, 255, 255, .4); }
+.mac-dock i {
+  position: relative; display: grid; place-items: center; width: 46px; height: 46px; border-radius: 11px;
+  font: 700 17px Menlo, Consolas, monospace; font-style: normal; color: #fff; box-shadow: 0 2px 5px rgba(0, 0, 0, .3);
+}
+.mac-dock i.on::after { content: ''; position: absolute; bottom: -5px; left: 50%; width: 4px; height: 4px; margin-left: -2px; border-radius: 50%; background: rgba(255, 255, 255, .85); }
+.mac-dock .d-finder { background: linear-gradient(90deg, #1b8cf2 50%, #e9f3fd 50%); }
+.mac-dock .d-finder::before { content: ''; width: 18px; height: 8px; margin-top: 12px; border-bottom: 3px solid #13365c; border-radius: 0 0 50% 50%; }
+.mac-dock .d-compass { background: radial-gradient(circle, #fff 0 20%, transparent 21%), conic-gradient(#ff5145 0 12%, #fff 12% 50%, #ff5145 50% 62%, #fff 62%) center / 26px 26px no-repeat, radial-gradient(circle, #e7f3ff 0 56%, #2a8cf0 58%); }
+.mac-dock .d-mail { background: linear-gradient(#5ab6ff, #1a74e8); }
+.mac-dock .d-mail::before { content: ''; width: 26px; height: 17px; border-radius: 2px; background: linear-gradient(155deg, transparent 48%, #cfe6ff 49% 53%, transparent 54%), linear-gradient(205deg, transparent 48%, #cfe6ff 49% 53%, transparent 54%), #fff; }
+.mac-dock .d-notes { background: linear-gradient(#ffd84d 0 26%, #fff 26%); }
+.mac-dock .d-notes::before { content: ''; width: 30px; height: 20px; margin-top: 12px; background: repeating-linear-gradient(#fff 0 5px, #d9d9dd 5px 6px); }
+.mac-dock .d-term { background: #1d1d1f; color: #7fe07f; border: 1px solid #555; justify-items: start; padding-left: 7px; font-size: 14px; }
+.mac-dock .d-term::before { content: '>_'; }
+.mac-dock .d-code { background: linear-gradient(#3b95e8, #1f67c4); font-size: 14px; }
+.mac-dock .d-code::before { content: '</>'; }
+.mac-dock .d-gear { background: radial-gradient(circle, #8e9097 0 22%, transparent 23%), repeating-conic-gradient(#b8bac0 0 15deg, #6f7178 15deg 30deg); }
+.mac-dock .d-gear::before { content: ''; width: 22px; height: 22px; border-radius: 50%; border: 5px solid #d7d8dc; }
+.mac-dock .d-trash { background: linear-gradient(rgba(255, 255, 255, .55), rgba(255, 255, 255, .25)); }
+.mac-dock .d-trash::before { content: ''; width: 20px; height: 26px; margin-top: 4px; border-radius: 0 0 4px 4px; background: repeating-linear-gradient(90deg, rgba(90, 94, 104, .7) 0 2px, transparent 2px 5px); border: 2px solid rgba(90, 94, 104, .8); border-top-width: 3px; }
+@media (max-width: 700px) { .mac-dock, .mac-icons { display: none; } .game-modal.mac .game-modal-inner { inset: 0; } }
 
+/* the CV page's own desktop, inside the MacBook */
+.game-modal .desktop { min-height: 0; max-width: none; padding: 6px 4px 24px; gap: 28px; }
+.game-modal .desk-col { gap: 28px; }
+.game-modal .desktop #skills { margin-top: 36px; }
+
+/* sections you haven't got yet: same window, the words encrypted */
+.redacted .content, .redacted .footer-btns { color: rgba(222, 223, 214, .55); }
+.redacted .accent, .redacted .muted, .redacted a { color: inherit; }
+.redacted .bars { width: 0 !important; }
+.redacted .cs-btn, .redacted input, .redacted label { pointer-events: none; }
+.redacted .footer-btns .cs-btn { opacity: .55; }
+.redact-note {
+  width: fit-content; margin: 0 0 10px !important; padding: 3px 8px; letter-spacing: .06em;
+  color: #ff6a5a !important; border: 1px dashed rgba(255, 106, 90, .7); background: rgba(40, 0, 0, .35);
+}
+
+/* the hack: a Terminal window on the MacBook */
+.mac-term {
+  width: min(640px, 100%); margin: 9% auto 0; overflow: hidden; border-radius: 10px;
+  background: rgba(20, 20, 24, .94); box-shadow: 0 0 0 1px rgba(255, 255, 255, .12), 0 24px 60px rgba(0, 0, 0, .55);
+  font: 14px/1.5 Menlo, Consolas, monospace; color: #e6e6e6;
+}
+.mac-term-bar {
+  display: flex; align-items: center; gap: 8px; height: 28px; padding: 0 12px;
+  background: linear-gradient(#3a3a3f, #2c2c30); font: 12.5px -apple-system, BlinkMacSystemFont, "Segoe UI", Arial, sans-serif; color: #b9b9be;
+}
+.mac-term-bar i { width: 12px; height: 12px; border-radius: 50%; background: #ff5f57; }
+.mac-term-bar i:nth-child(2) { background: #febc2e; }
+.mac-term-bar i:nth-child(3) { background: #28c840; }
+.mac-term-bar span { flex: 1; text-align: center; margin-right: 52px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.mac-term-body { min-height: 190px; padding: 14px 16px 6px; }
+.mac-term-body p { margin: 0 0 3px; }
+.mac-term-body .cmd { color: #e7d36b; }
+.mac-term-body .ok { color: #7fe07f; }
+.mac-term-body p:last-child::after { content: ''; display: inline-block; width: .6em; height: 1.05em; margin-left: 4px; vertical-align: text-bottom; background: #e6e6e6; animation: term-blink 1s steps(1) infinite; }
+@keyframes term-blink { 50% { opacity: 0; } }
+.mac-term-prog { height: 8px; margin: 6px 16px 16px; overflow: hidden; border-radius: 4px; background: #34343a; }
+.mac-term-prog div { width: 0; height: 100%; background: linear-gradient(90deg, #2ea043, #7fe07f); transition: width 2.6s linear; }
+
+/* bonus: the server's popup over the decrypted CV */
+.game-modal .cs-dialog.mac-congrats {
+  position: absolute; inset: auto; left: 50%; top: 44%; transform: translate(-50%, -50%); z-index: 4;
+  width: min(480px, calc(100% - 32px)); margin: 0; box-shadow: 0 20px 60px rgba(0, 0, 0, .6);
+}
+.mac-congrats h2 { color: var(--accent, #c4b550); margin: 0 0 8px; }
+
+/* the window you just decrypted blinks three times */
+.game-modal .cs-dialog.hacked { animation: hacked-blink .5s steps(1) 3; }
+@keyframes hacked-blink {
+  0% { outline: 3px solid #7fe07f; box-shadow: 0 0 0 6px rgba(127, 224, 127, .35), 0 0 40px rgba(127, 224, 127, .6); }
+  50% { outline: 3px solid transparent; box-shadow: none; }
+}
+
+/* MacBook battery (bottom left) and the countdown running low */
+.hud-num.battery svg { width: 1.55em; height: .78em; }
+.hud-num.low { color: rgba(235, 70, 55, .95); }
+.hud-num#h-time-wrap.low { animation: term-blink 1s steps(1) infinite; }
+
+/* HQ on the radio, in the lift */
+.radio-msg {
+  position: absolute; left: 50%; bottom: 22%; transform: translateX(-50%);
+  width: min(680px, calc(100% - 32px)); padding: .6em .9em 1.4em;
+  background: rgba(0, 0, 0, .6); border: 1px solid rgba(255, 168, 0, .6);
+  color: #fff; font-size: 1.1em; line-height: 1.45; text-shadow: 1px 1px 0 #000;
+}
+.radio-msg[hidden] { display: none; }
+.radio-msg b { color: #9fc4ff; font-weight: 400; margin-right: .4em; }
+.radio-msg p { display: inline; }
+.radio-msg .skip { position: absolute; right: .8em; bottom: .3em; font-size: .8em; color: var(--hud); }
